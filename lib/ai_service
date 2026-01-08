@@ -1,0 +1,67 @@
+import 'package:flutter_gemma/flutter_gemma.dart';
+
+enum StudentTier { easy, medium, hard, basic, advanced }
+
+class AIService {
+  // MODULE 1: Personalized Practice Quiz
+  Future<String> generateQuiz({
+    required String content,
+    required StudentTier tier,
+  }) async {
+    String tierInstruction = _getQuizTierInstruction(tier);
+    String prompt = """
+      Role: Expert Quiz Master
+      Task: Create an offline practice quiz for a ${tier.name} level student.
+      
+      Questions to include:
+      1. MCQs
+      2. Fill in the blanks
+      3. Answer in your own words (Open-ended)
+      4. Odd one out
+      5. Rearrange the following
+      
+      Difficulty Instruction: $tierInstruction
+      Context: $content
+    """;
+    return await _callGemma(prompt);
+  }
+
+  // MODULE 6: Tier-Based Exam Paper
+  Future<String> generateExam({
+    required String content,
+    required StudentTier tier, // 'basic' or 'advanced'
+  }) async {
+    String pattern = tier == StudentTier.basic 
+      ? "MCQs, Match the following, Fill in the blanks (WITH HINTS in brackets), Short Answers, Long Answers."
+      : "MCQs, Fill in the blanks (NO HINTS), Short/Long Answers, Match, and a CASE STUDY with opinion summary.";
+    
+    String prompt = """
+      Role: Formal Examiner
+      Task: Generate a ${tier.name.toUpperCase()} tier exam paper.
+      Requirements: Use this pattern: $pattern
+      Complexity: ${tier == StudentTier.basic ? "Foundational recall" : "High-level analysis"}
+      Context: $content
+    """;
+    return await _callGemma(prompt);
+  }
+
+  String _getQuizTierInstruction(StudentTier tier) {
+    switch (tier) {
+      case StudentTier.easy: return "Focus on direct definitions and simple recognition.";
+      case StudentTier.medium: return "Include conceptual understanding and 'why' questions.";
+      case StudentTier.hard: return "Focus on application, critical thinking, and synthesis of ideas.";
+      default: return "Standard difficulty.";
+    }
+  }
+
+  Future<String> _callGemma(String prompt) async {
+    final model = await FlutterGemma.getActiveModel();
+    final chat = await model.createChat();
+    await chat.addQueryChunk(Message.text(text: prompt, isUser: true));
+    final response = await chat.generateChatResponse();
+    
+    if (response is TextResponse) return response.token;
+    if (response is ThinkingResponse) return response.content;
+    return response.toString();
+  }
+}
