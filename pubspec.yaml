@@ -10,22 +10,22 @@ dependencies:
   flutter:
     sdk: flutter
   # AI & Persistence
-  flutter_gemma: ^0.11.16
-  hive_flutter: ^1.1.0
-  sqflite: ^2.4.1
+  flutter_gemma: ^0.12.0
+  sqflite: ^2.4.2
   path: ^1.9.1
-  # File & Image Management
+  # File Management & PDF Processing (Mod 1 & 6)
   path_provider: ^2.1.5
-  pdf_render: ^1.4.10  # Best for extracting images/pages from PDF chunks
-  crypto: ^3.0.6       # To generate unique IDs for image tags
+  pdf_render: ^1.4.12
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # FIXED: Moved from dependencies to dev_dependencies
   flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true
   assets:
     - assets/models/gemma.task
-    - assets/textbooks/ # Place your source PDFs here
+    - assets/textbooks/

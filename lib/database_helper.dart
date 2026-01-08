@@ -1,84 +1,63 @@
-import 'dart:async';
-import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
-
   DatabaseHelper._init();
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('edtech_v2.db');
+    _database = await _initDB('edtech_full.db');
     return _database!;
   }
 
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
-
-    return await openDatabase(
-      path, 
-      version: 1, 
-      onCreate: _createDB
-    );
+    return await openDatabase(path, version: 1, onCreate: _createDB);
   }
 
   Future _createDB(Database db, int version) async {
-    // 1. Table for AI-generated Quizzes & Exams (Modules 1 & 6)
+    // MOD 1: Login & Roles
     await db.execute('''
-      CREATE TABLE ContentLibrary (
+      CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        body TEXT,
-        type TEXT, -- 'quiz' or 'exam'
-        complexity TEXT, -- 'basic' or 'advanced'
-        created_at TEXT
+        name TEXT, email TEXT UNIQUE, password TEXT, role TEXT, 
+        class_details TEXT, is_class_teacher INTEGER
       )
     ''');
 
-    // 2. Table for your Image Library (Your new plan)
+    // MOD 6: Question Papers (Header)
     await db.execute('''
-      CREATE TABLE ImageLibrary (
+      CREATE TABLE assessments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        image_path TEXT,    -- Path to the saved .png in app docs
-        original_page INTEGER,
-        tags TEXT,          -- AI generated tags: 'cell', 'mitosis', etc.
-        description TEXT,   -- Context extracted from surrounding text
-        source_pdf TEXT
+        title TEXT, tier TEXT, max_marks INTEGER DEFAULT 100, 
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 
-    // 3. Table for Student Progress (Member 2)
+    // The Complex Question Table for Multi-format Papers
     await db.execute('''
-      CREATE TABLE StudentProgress (
+      CREATE TABLE questions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        module_id INTEGER,
-        score REAL,
-        completed_at TEXT
+        assessment_id INTEGER,
+        type TEXT, -- mcq, fillup, match, sequence, assertion_reason, summary
+        question_text TEXT,
+        options TEXT, -- JSON for MCQs/Matching pairs
+        correct_answer TEXT,
+        hint TEXT, -- For Basic tier bracketed hints
+        marks INTEGER,
+        FOREIGN KEY (assessment_id) REFERENCES assessments (id)
       )
     ''');
-  }
 
-  // --- Helper Methods for Your Task ---
-
-  Future<int> insertImage(Map<String, dynamic> row) async {
-    Database db = await instance.database;
-    return await db.insert('ImageLibrary', row);
-  }
-
-  Future<List<Map<String, dynamic>>> searchImagesByTag(String tag) async {
-    Database db = await instance.database;
-    return await db.query(
-      'ImageLibrary', 
-      where: 'tags LIKE ?', 
-      whereArgs: ['%$tag%']
-    );
-  }
-
-  Future close() async {
-    final db = await instance.database;
-    db.close();
+    // MOD 7: Alumni Connect
+    await db.execute('''
+      CREATE TABLE alumni_connections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_id INTEGER, alumni_id INTEGER, status TEXT
+      )
+    ''');
   }
 }
