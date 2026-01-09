@@ -1,33 +1,54 @@
 import 'package:flutter_gemma/flutter_gemma.dart';
 
 class AIService {
-  /// Generates a 100-mark exam using the session-based API.
-  Future<String> generate100MarkExam({required String topic, required String tier}) async {
-    // 1. Get the Model (Guaranteed non-null in v0.12.0)
-    final model = await FlutterGemma.getActiveModel(maxTokens: 2048);
-
-    // 2. Create the Chat Session
-    final chatSession = await model.createChat();
-
-    // Marking scheme pattern
-    String pattern = (tier == 'Basic') 
-      ? "BASIC: 5 MCQs, 5 Fill-ups, 5 Match, 5 Rearrange, 5 Odd-one, 7 Short, 7 Long [100m]"
-      : "ADVANCED: 5 MS-MCQs, 5 Fill-ups, 5 Correct-stmt, 1 Summary, 3 Assertion, 2 T/F, 7 Short, 7 Long [100m]";
-
-    String finalPrompt = "Generate $topic exam JSON. Pattern: $pattern. Return ONLY JSON.";
-
-    // 3. Process the query
-    await chatSession.addQueryChunk(Message.text(text: finalPrompt, isUser: true));
+  /// GEN AI: Automated Question Paper/Quiz Generation [cite: 25, 84, 120]
+  Future<String> generateAssessment({required String prompt, int maxTokens = 3000}) async {
+    final model = await FlutterGemma.getActiveModel(maxTokens: maxTokens);
+    final chat = await model.createChat();
     
-    // 4. Collect response (Standard streaming procedure)
-    StringBuffer responseText = StringBuffer();
-    await for (final chunk in chatSession.generateChatResponseAsync()) {
-      responseText.write(chunk);
+    // Generates content with high-quality distractors [cite: 120]
+    await chat.addQueryChunk(Message.text(text: prompt, isUser: true));
+    
+    StringBuffer response = StringBuffer();
+    await for (final chunk in chat.generateChatResponseAsync()) {
+      response.write(chunk);
     }
+    return response.toString();
+  }
 
-    // Optional: Close session to free memory
-    // await chatSession.close();
+  /// XAI: "Explain My Mistake" Logic [cite: 108]
+  Future<String> explainMistake({
+    required String question, 
+    required String studentAns, 
+    required String correctAns
+  }) async {
+    final model = await FlutterGemma.getActiveModel(maxTokens: 512);
+    final chat = await model.createChat();
 
-    return responseText.toString();
+    String xaiPrompt = "Explain reasoning: Question: $question. Student Answer: $studentAns. Correct: $correctAns. Why is it wrong?";
+
+    await chat.addQueryChunk(Message.text(text: xaiPrompt, isUser: true));
+    
+    StringBuffer feedback = StringBuffer();
+    await for (final chunk in chat.generateChatResponseAsync()) {
+      feedback.write(chunk);
+    }
+    return feedback.toString();
+  }
+
+  /// AGENTIC AI: Dynamic Deadline Adjustment [cite: 48, 128, 129]
+  Future<String> evaluateProgress(String perfData) async {
+    final model = await FlutterGemma.getActiveModel(maxTokens: 512);
+    final chat = await model.createChat();
+
+    String agentPrompt = "Analyze $perfData. Does student need a deadline extension? [cite: 47, 129]";
+
+    await chat.addQueryChunk(Message.text(text: agentPrompt, isUser: true));
+    
+    StringBuffer suggestion = StringBuffer();
+    await for (final chunk in chat.generateChatResponseAsync()) {
+      suggestion.write(chunk);
+    }
+    return suggestion.toString();
   }
 }
