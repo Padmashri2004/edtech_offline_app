@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:edtech_offline_app/src/features/auth/data/auth_repository.dart';
 import 'package:edtech_offline_app/src/features/auth/presentation/registration_screen.dart';
-// Import the new state model
 import 'package:edtech_offline_app/src/features/auth/presentation/login_state.dart';
+import 'package:edtech_offline_app/src/core/routing/dashboard_router.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,83 +13,75 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final AuthRepository _authRepo = AuthRepository();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   
-  // Track the UI state
   LoginState _state = LoginState();
-  bool _rememberMe = false;
+  bool _rememberMe = false; 
   String _selectedRole = 'student';
 
   Future<void> _handleLogin() async {
     setState(() => _state = _state.copyWith(status: AuthStatus.loading));
 
-    try {
-      final user = await _authRepo.loginUser(
-        _emailController.text.trim(), 
-        _passwordController.text.trim(), 
-        _rememberMe
-      );
+    final user = await _authRepo.loginUser(
+      _emailController.text.trim(), 
+      _passwordController.text.trim(), 
+      _rememberMe
+    );
 
-      if (user != null) {
-        if (user['role'] == _selectedRole) {
-          setState(() => _state = _state.copyWith(status: AuthStatus.authenticated, userRole: user['role']));
-          _showMsg("Success! Welcome ${user['name']}");
-        } else {
-          setState(() => _state = _state.copyWith(status: AuthStatus.error, errorMessage: "Role mismatch"));
+    if (user != null) {
+      if (user['role'] == _selectedRole) {
+        setState(() => _state = _state.copyWith(status: AuthStatus.authenticated));
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => DashboardRouter(role: user['role'])),
+          );
         }
       } else {
-        setState(() => _state = _state.copyWith(status: AuthStatus.error, errorMessage: "Invalid credentials"));
+        setState(() => _state = _state.copyWith(status: AuthStatus.error, errorMessage: "Role mismatch"));
       }
-    } catch (e) {
-      setState(() => _state = _state.copyWith(status: AuthStatus.error, errorMessage: e.toString()));
+    } else {
+      setState(() => _state = _state.copyWith(status: AuthStatus.error, errorMessage: "Invalid credentials"));
     }
-  }
-
-  void _showMsg(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text("Login", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
-            
-            // Show error message if state has one
-            if (_state.status == AuthStatus.error)
-              Text(_state.errorMessage!, style: const TextStyle(color: Colors.red)),
-
-            DropdownButtonFormField<String>(
-              initialValue: _selectedRole,
-              items: const [
-                DropdownMenuItem(value: 'teacher', child: Text("Teacher")),
-                DropdownMenuItem(value: 'student', child: Text("Student")),
-                DropdownMenuItem(value: 'parent', child: Text("Parent")),
-              ],
-              onChanged: (val) => setState(() => _selectedRole = val!),
-            ),
-            
-            TextField(controller: _emailController, decoration: const InputDecoration(labelText: "Gmail ID")),
-            TextField(controller: _passwordController, decoration: const InputDecoration(labelText: "Password"), obscureText: true),
-            
-            const SizedBox(height: 20),
-
-            // Toggle between Button and Loading Spinner
-            _state.status == AuthStatus.loading 
-              ? const CircularProgressIndicator()
-              : ElevatedButton(onPressed: _handleLogin, child: const Text("LOGIN")),
-
-            TextButton(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RegistrationScreen())),
-              child: const Text("Create New Account"),
-            ),
-          ],
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              const Text("EdTech Login", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 30),
+              DropdownButtonFormField<String>(
+                initialValue: _selectedRole,
+                items: const [
+                  DropdownMenuItem(value: 'teacher', child: Text("Teacher")),
+                  DropdownMenuItem(value: 'student', child: Text("Student")),
+                  DropdownMenuItem(value: 'parent', child: Text("Parent")),
+                ],
+                onChanged: (val) => setState(() => _selectedRole = val!),
+              ),
+              TextField(controller: _emailController, decoration: const InputDecoration(labelText: "Gmail ID")),
+              TextField(controller: _passwordController, decoration: const InputDecoration(labelText: "Password"), obscureText: true),
+              CheckboxListTile(
+                title: const Text("Remember in app"),
+                value: _rememberMe,
+                onChanged: (val) => setState(() => _rememberMe = val!),
+              ),
+              const SizedBox(height: 20),
+              _state.status == AuthStatus.loading 
+                ? const CircularProgressIndicator()
+                : ElevatedButton(onPressed: _handleLogin, child: const Text("LOGIN")),
+              TextButton(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RegistrationScreen())),
+                child: const Text("Create New Account"),
+              ),
+            ],
+          ),
         ),
       ),
     );
