@@ -1,32 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
-import 'src/core/database/database_helper.dart'; 
-import 'src/core/ai/ai_service.dart'; // Import is now used below
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:edtech_offline_app/src/core/database/database_helper.dart';
+import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/login_screen.dart';
+import 'package:edtech_offline_app/src/core/routing/dashboard_router.dart';
+import 'package:edtech_offline_app/src/core/utils/alumni_engine.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 1. Initialize On-Device Al Pipeline [cite: 104, 115]
-  await FlutterGemma.initialize();
-
-  // 2. Initialize Core Database [cite: 110, 112]
+  
+  // Initialize Hive for user persistence
+  await Hive.initFlutter();
+  await Hive.openBox('settings');
+  
+  // Initialize SQLite
   await DatabaseHelper.instance.database;
 
-  // 3. Alumni & Agentic Transition Logic [cite: 96, 128]
-  final ai = AIService();
-  await checkAlumniTransitions(ai);
+  // 2. Run the Academic Transition Engine (Task 3)
+  await AlumniEngine.checkAndPromoteStudents();
 
   runApp(const EdTechApp());
-}
-
-/// Handles graduation logic for Grades 1-8 in June 
-Future<void> checkAlumniTransitions(AIService ai) async {
-  final now = DateTime.now();
-  if (now.month == 6) {
-    // Agentic AI can verify graduation readiness [cite: 128]
-    await ai.evaluateProgress("End of year student status check.");
-    // Database logic to increment class_id and revoke Class 8 access [cite: 96]
-  }
 }
 
 class EdTechApp extends StatelessWidget {
@@ -34,46 +26,22 @@ class EdTechApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settingsBox = Hive.box('settings');
+    // Check if "Remember in app" was previously selected
+    final bool isLoggedIn = settingsBox.get('isLoggedIn', defaultValue: false);
+    final String? userRole = settingsBox.get('userRole');
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
-      home: const RoleSelectionScreen(),
-    );
-  }
-}
-
-class RoleSelectionScreen extends StatelessWidget {
-  const RoleSelectionScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Offline EdTech Portal")),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text("Select Your Role to Login", style: TextStyle(fontSize: 20)),
-            const SizedBox(height: 30),
-            _roleBtn(context, "Teacher", Icons.school),
-            _roleBtn(context, "Student", Icons.person),
-            _roleBtn(context, "Parent", Icons.family_restroom),
-          ],
-        ),
+      title: 'EdTech Offline',
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.indigo,
       ),
-    );
-  }
-
-  Widget _roleBtn(BuildContext context, String role, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: ElevatedButton.icon(
-        icon: Icon(icon),
-        label: Text("Continue as $role"),
-        onPressed: () {
-          // Navigates to role-filtered login [cite: 1]
-        },
-      ),
+      // Auto-Login logic
+      home: isLoggedIn 
+          ? DashboardRouter(role: userRole) 
+          : const LoginScreen(),
     );
   }
 }
