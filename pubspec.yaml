@@ -17,6 +17,8 @@ dependencies:
   path_provider: ^2.1.5
   pdf_render: ^1.4.12
   crypto: ^3.0.7
+  pdf: ^3.10.6
+
 
 dev_dependencies:
   flutter_test:
