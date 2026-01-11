@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'pdf_export_service.dart';
-import 'package:flutter/material.dart';
 
 class ParentDashboard extends StatelessWidget {
   const ParentDashboard({super.key});
@@ -13,7 +12,7 @@ class ParentDashboard extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
+          children: [
             Text(
               'Student Overview',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -46,7 +45,7 @@ class ParentDashboard extends StatelessWidget {
 
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text(
                                   'Progress report downloaded successfully'),
                             ),

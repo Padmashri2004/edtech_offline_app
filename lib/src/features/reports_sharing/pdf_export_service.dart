@@ -1,15 +1,26 @@
-import 'dart:io';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 class PdfExportService {
-  Future<File> generateDummyPdf() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/sample_report.txt');
+  Future<void> generateProgressReportPdf() async {
+    final pdf = pw.Document();
 
-    await file.writeAsString(
-      'This is a placeholder for Parent Progress Report PDF',
+    pdf.addPage(
+      pw.Page(
+        build: (context) => pw.Center(
+          child: pw.Text(
+            'Student Progress Report',
+            style: pw.TextStyle(fontSize: 24),
+          ),
+        ),
+      ),
     );
 
-    return file;
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/progress_report.pdf');
+
+    await file.writeAsBytes(await pdf.save());
   }
 }
