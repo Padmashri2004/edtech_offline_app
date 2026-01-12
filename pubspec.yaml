@@ -17,16 +17,12 @@ dependencies:
   path_provider: ^2.1.5
   pdf_render: ^1.4.12
   crypto: ^3.0.7
-<<<<<<< HEAD
-  hive: ^2.2.3
-  hive_flutter: ^1.1.0
-  logger: ^2.4.0
-=======
   syncfusion_flutter_pdf: ^21.1.35  # Helps us read the PDF content
   file_picker: ^5.3.0
   logger: ^2.5.0
   provider: ^6.1.1
->>>>>>> f4a6942 (finalized offline AI engine, textbook parser, and quiz persistence)
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
 
 dev_dependencies:
   flutter_test:

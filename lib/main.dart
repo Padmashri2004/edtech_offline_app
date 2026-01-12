@@ -1,24 +1,4 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:edtech_offline_app/src/core/database/database_helper.dart';
-import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/login_screen.dart';
-import 'package:edtech_offline_app/src/core/routing/dashboard_router.dart';
-import 'package:edtech_offline_app/src/core/utils/alumni_engine.dart';
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Hive for user persistence
-  await Hive.initFlutter();
-  await Hive.openBox('settings');
-  
-  // Initialize SQLite
-  await DatabaseHelper.instance.database;
-
-  // 2. Run the Academic Transition Engine (Task 3)
-  await AlumniEngine.checkAndPromoteStudents();
-=======
 import 'package:provider/provider.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 // Core Imports
@@ -40,7 +20,6 @@ void main() async {
   // 3. Setup Dependencies for Member 1
   final aiService = AIService();
   final aiRepository = AIRepository(aiService);
->>>>>>> f4a6942 (finalized offline AI engine, textbook parser, and quiz persistence)
 
   // 4. Run App with Provider injection
   runApp(
@@ -55,8 +34,6 @@ void main() async {
   );
 }
 
-<<<<<<< HEAD
-=======
 /// Member 1: AI Model Initialization Logic
 Future<void> _initAiEngine() async {
   try {
@@ -74,25 +51,13 @@ Future<void> _initAiEngine() async {
   }
 }
 
->>>>>>> f4a6942 (finalized offline AI engine, textbook parser, and quiz persistence)
 class EdTechApp extends StatelessWidget {
   const EdTechApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final settingsBox = Hive.box('settings');
-    // Check if "Remember in app" was previously selected
-    final bool isLoggedIn = settingsBox.get('isLoggedIn', defaultValue: false);
-    final String? userRole = settingsBox.get('userRole');
-
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-<<<<<<< HEAD
-      title: 'EdTech Offline',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.indigo,
-=======
       theme: ThemeData(
         useMaterial3: true, 
         colorSchemeSeed: Colors.blue,
@@ -137,12 +102,7 @@ class RoleSelectionScreen extends StatelessWidget {
         onPressed: () {
           debugPrint("Navigating to $role login...");
         },
->>>>>>> f4a6942 (finalized offline AI engine, textbook parser, and quiz persistence)
       ),
-      // Auto-Login logic
-      home: isLoggedIn 
-          ? DashboardRouter(role: userRole) 
-          : const LoginScreen(),
     );
   }
 }
