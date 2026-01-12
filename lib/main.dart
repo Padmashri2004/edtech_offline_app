@@ -1,31 +1,53 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
-import 'src/core/database/database_helper.dart'; 
-import 'src/core/ai/ai_service.dart'; // Import is now used below
+// Core Imports
+import 'package:edtech_offline_app/src/core/database/database_helper.dart'; 
+import 'package:edtech_offline_app/src/core/ai/ai_service.dart';
+// Feature Imports
+import 'package:edtech_offline_app/src/features/ai_assistant/data/ai_repository.dart';
+import 'package:edtech_offline_app/src/features/ai_assistant/presentation/ai_chat_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Initialize On-Device Al Pipeline [cite: 104, 115]
-  await FlutterGemma.initialize();
+  // 1. Initialize On-Device AI Pipeline
+  await _initAiEngine();
 
-  // 2. Initialize Core Database [cite: 110, 112]
+  // 2. Initialize Core Database
   await DatabaseHelper.instance.database;
 
-  // 3. Alumni & Agentic Transition Logic [cite: 96, 128]
-  final ai = AIService();
-  await checkAlumniTransitions(ai);
+  // 3. Setup Dependencies for Member 1
+  final aiService = AIService();
+  final aiRepository = AIRepository(aiService);
 
-  runApp(const EdTechApp());
+  // 4. Run App with Provider injection
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => AIChatController(aiRepository),
+        ),
+      ],
+      child: const EdTechApp(),
+    ),
+  );
 }
 
-/// Handles graduation logic for Grades 1-8 in June 
-Future<void> checkAlumniTransitions(AIService ai) async {
-  final now = DateTime.now();
-  if (now.month == 6) {
-    // Agentic AI can verify graduation readiness [cite: 128]
-    await ai.evaluateProgress("End of year student status check.");
-    // Database logic to increment class_id and revoke Class 8 access [cite: 96]
+/// Member 1: AI Model Initialization Logic
+Future<void> _initAiEngine() async {
+  try {
+    await FlutterGemma.initialize();
+
+    // Link to your local asset model
+    // Using gemma.task as established in your assets folder
+    await FlutterGemma.installModel(
+      modelType: ModelType.gemmaIt,
+    ).fromAsset('assets/models/gemma.task').install();
+    
+    debugPrint("✅ Member 1: Offline AI Engine Ready");
+  } catch (e) {
+    debugPrint("❌ Member 1: AI Init Error: $e");
   }
 }
 
@@ -36,8 +58,15 @@ class EdTechApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
+      theme: ThemeData(
+        useMaterial3: true, 
+        colorSchemeSeed: Colors.blue,
+      ),
       home: const RoleSelectionScreen(),
+      routes: {
+        '/login': (context) => const Placeholder(),
+        '/teacher-dashboard': (context) => const Placeholder(),
+      },
     );
   }
 }
@@ -71,7 +100,7 @@ class RoleSelectionScreen extends StatelessWidget {
         icon: Icon(icon),
         label: Text("Continue as $role"),
         onPressed: () {
-          // Navigates to role-filtered login [cite: 1]
+          debugPrint("Navigating to $role login...");
         },
       ),
     );
