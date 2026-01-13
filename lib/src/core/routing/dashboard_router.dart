@@ -1,24 +1,36 @@
 import 'package:flutter/material.dart';
-import 'package:edtech_offline_app/src/features/dashboard/presentation/teacher_dashboard.dart';
-import 'package:edtech_offline_app/src/features/dashboard/presentation/student_dashboard.dart';
-import 'package:edtech_offline_app/src/features/dashboard/presentation/parent_dashboard.dart';
 
 class DashboardRouter {
   static Widget getDashboardForRole(String role) {
     switch (role) {
       case 'Teacher':
-        return const TeacherDashboard();
+        return _buildPlaceholderDashboard("Teacher Portal");
       case 'Student':
-        return const StudentDashboard();
+        return _buildPlaceholderDashboard("Student Portal");
       case 'Parent':
-        return const ParentDashboard();
+        return _buildPlaceholderDashboard("Parent Portal");
       default:
-        // Since LoginScreen doesn't exist yet, we return a simple Scaffold
-        // This stops the "Target of URI doesn't exist" error.
-        return const Scaffold(
-          body: Center(child: Text("Login Screen Placeholder - Member 2 Task")),
-        );
+        return _buildPlaceholderDashboard("Unknown Role");
     }
+  }
+
+  /// A temporary placeholder so the app runs without Member 3's files
+  static Widget _buildPlaceholderDashboard(String title) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.construction, size: 64, color: Colors.grey),
+            const SizedBox(height: 20),
+            Text("$title is under construction."),
+            const SizedBox(height: 10),
+            const Text("(Member 3 Task)", style: TextStyle(color: Colors.blue)),
+          ],
+        ),
+      ),
+    );
   }
 
   static Route createRoute(Widget destination) {

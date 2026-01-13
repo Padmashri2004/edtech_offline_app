@@ -4,6 +4,7 @@ import 'package:path/path.dart';
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
+
   DatabaseHelper._init();
 
   Future<Database> get database async {
@@ -15,69 +16,39 @@ class DatabaseHelper {
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
+    // Note: If you already ran the app, you might need to uninstall it 
+    // to reset the DB version, or change version to 2 here.
     return await openDatabase(path, version: 1, onCreate: _createDB);
   }
 
   Future _createDB(Database db, int version) async {
-    // MOD 1: User Identity (Teacher, Student, Parent)
+    // 1. Exams Table (Matches ExamModel)
     await db.execute('''
-      CREATE TABLE users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        role TEXT NOT NULL, 
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        salutation TEXT, -- ms, mr, mrs
-        class_id INTEGER, 
-        section TEXT,
-        subject_handles TEXT, -- Checkbox for multiple subjects
-        is_class_teacher INTEGER DEFAULT 0,
-        parent_student_tag TEXT, -- Link parent to student profile ID
-        points INTEGER DEFAULT 0, -- Rewards
-        graduation_year INTEGER -- For Alumni transition logic
-      )
-    ''');
-
-    // MOD 1 & 6: Assessment Engine (Quiz & Question Papers)
-    await db.execute('''
-      CREATE TABLE assessments (
+      CREATE TABLE exams (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
-        tier TEXT NOT NULL, -- Basic / Advanced
-        is_digital INTEGER NOT NULL, -- 1=App Quiz, 0=Physical Paper
-        max_marks INTEGER,
-        deadline TEXT,
-        timer_minutes INTEGER,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        difficulty TEXT NOT NULL, -- FIXED: Was 'tier'
+        timestamp TEXT NOT NULL,  -- FIXED: Was 'created_at'
+        is_digital INTEGER DEFAULT 1, 
+        timer_minutes INTEGER DEFAULT 30
       )
     ''');
 
-    // Questions with Distractor & XAI Logic
+    // 2. Questions Table (Matches QuestionModel)
     await db.execute('''
       CREATE TABLE questions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        assessment_id INTEGER,
-        type TEXT, -- mcq, fillups, match, assertion_reason
-        question_text TEXT,
-        options TEXT, -- JSON distractors
-        correct_answer TEXT,
-        xai_explanation TEXT, -- "Explain My Mistake"
-        marks INTEGER,
-        image_path TEXT, -- Textbook Image Library
-        FOREIGN KEY (assessment_id) REFERENCES assessments (id)
+        exam_id INTEGER, -- FIXED: Was 'assessment_id'
+        type TEXT DEFAULT 'mcq', 
+        question_text TEXT NOT NULL,
+        options TEXT NOT NULL, 
+        correct_answer TEXT NOT NULL,
+        explanation TEXT, -- FIXED: Was 'xai_explanation'
+        marks INTEGER DEFAULT 1,
+        FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE
       )
     ''');
-
-    // MOD 7: Alumni Connect Approval
-    await db.execute('''
-      CREATE TABLE alumni_connections (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        student_id INTEGER,
-        alumni_id INTEGER,
-        status TEXT DEFAULT 'pending', -- approved/pending
-        FOREIGN KEY (student_id) REFERENCES users (id),
-        FOREIGN KEY (alumni_id) REFERENCES users (id)
-      )
-    ''');
+    
+    // REMOVED: users, alumni_connections (Member 2 tasks)
   }
 }

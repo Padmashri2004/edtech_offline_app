@@ -15,55 +15,69 @@ class ExamModel {
     required this.questions,
   });
 
-  // Convert Database Map to Exam Object
-  factory ExamModel.fromMap(Map<String, dynamic> map) {
-    return ExamModel(
-      id: map['id'],
-      title: map['title'],
-      difficulty: map['difficulty'],
-      timestamp: map['timestamp'],
-      questions: (jsonDecode(map['questions_json']) as List)
-          .map((q) => QuestionModel.fromMap(q))
-          .toList(),
-    );
-  }
-
-  // Convert Exam Object to Database Map for saving
+  /// Convert Exam object to Map for Database storage
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'title': title,
       'difficulty': difficulty,
       'timestamp': timestamp,
-      'questions_json': jsonEncode(questions.map((q) => q.toMap()).toList()),
+      // We don't store questions in the 'exams' table directly; 
+      // they are stored in the 'questions' table linked by ID.
     };
+  }
+
+  /// Create Exam object from Database Map
+  factory ExamModel.fromMap(Map<String, dynamic> map) {
+    return ExamModel(
+      id: map['id'],
+      title: map['title'],
+      difficulty: map['difficulty'],
+      timestamp: map['timestamp'],
+      questions: [], // Questions are usually loaded via a separate query
+    );
   }
 }
 
 class QuestionModel {
-  final String question;
-  final List<String> options;
-  final int answerIndex;
+  final int? id;
+  final int? examId;
+  final String questionText; // <--- This is the field the PDF service needs
+  final dynamic options;     // Can be String (JSON) or List<String>
+  final String correctAnswer;
+  final String? explanation;
 
   QuestionModel({
-    required this.question,
+    this.id,
+    this.examId,
+    required this.questionText,
     required this.options,
-    required this.answerIndex,
+    required this.correctAnswer,
+    this.explanation,
   });
 
+  /// Create Question object from AI Response (JSON) or Database Map
   factory QuestionModel.fromMap(Map<String, dynamic> map) {
     return QuestionModel(
-      question: map['question'],
-      options: List<String>.from(map['options']),
-      answerIndex: map['answer_index'],
+      // FIXED: Checks for 'question' (from AI) OR 'question_text' (from DB)
+      questionText: map['question'] ?? map['question_text'] ?? 'No Question Text',
+      options: map['options'],
+      // FIXED: Checks for 'answer_index' (AI) OR 'correct_answer' (DB)
+      correctAnswer: map['answer_index']?.toString() ?? map['correct_answer'] ?? '',
+      explanation: map['explanation'],
     );
   }
 
+  /// Convert Question object to Map for Database storage
   Map<String, dynamic> toMap() {
     return {
-      'question': question,
-      'options': options,
-      'answer_index': answerIndex,
+      'id': id,
+      'exam_id': examId,
+      'question_text': questionText,
+      // Ensure options are stored as a JSON string
+      'options': options is List ? jsonEncode(options) : options,
+      'correct_answer': correctAnswer,
+      'explanation': explanation,
     };
   }
 }
