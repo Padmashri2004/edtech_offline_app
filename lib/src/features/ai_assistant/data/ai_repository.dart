@@ -1,57 +1,71 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:logger/logger.dart';
 import 'package:edtech_offline_app/src/core/ai/ai_service.dart';
 import 'package:edtech_offline_app/src/core/utils/textbook_parser.dart';
-// Importing your existing prompt service
-import 'package:edtech_offline_app/services/ai_prompt_service.dart'; 
+import 'package:edtech_offline_app/services/ai_prompt_service.dart';
 
 class AIRepository {
   final AIService _aiService;
-  // Initialize the prompt service
-  final AiPromptService _promptService = AiPromptService(); 
+  final AiPromptService _promptService = AiPromptService();
   final Logger _logger = Logger();
 
   AIRepository(this._aiService);
 
-  /// Generates a quiz using the AiPromptService
   Future<List<Map<String, dynamic>>> getQuizFromChapter({
     required String rawContent,
     required String difficulty,
+    required String type,
+    int count = 5,
+    bool hints = false, // Added param
   }) async {
     try {
       final chunks = TextbookParser.cleanAndChunk(rawContent);
-      
-      // FIXED: Added space below (final context)
-      final context = chunks.first;
+      if (chunks.isEmpty) return [];
 
-      // Using the service to build the prompt
-      final prompt = _promptService.buildQuizPrompt(
-        text: context,
-        level: difficulty,
-      );
+      // Random chunk strategy
+      final random = Random();
+      final context = chunks[random.nextInt(chunks.length)];
 
-      _logger.i(" 🧠 Member 1: Calling generateAssessment for $difficulty level...");
+      final prompt = _promptService.buildSectionPrompt(
+          text: context,
+          difficulty: difficulty,
+          sectionType: type,
+          count: count,
+          hintsIncluded: hints);
 
-      final response = await _aiService.generateAssessment(prompt: prompt);
-      return List<Map<String, dynamic>>.from(jsonDecode(response));
+      _logger.i("🧠 Calling AI for $difficulty - $type...");
+      // Max tokens 2000 is safe for Nano model
+      final response =
+          await _aiService.generateAssessment(prompt: prompt, maxTokens: 2000);
+
+      String cleanJson = _sanitizeJson(response);
+      return List<Map<String, dynamic>>.from(jsonDecode(cleanJson));
     } catch (e) {
-      _logger.e(" ❌ Member 1 Repository Error: $e");
+      _logger.e("❌ AI Repo Error: $e");
       return [];
     }
   }
 
-  /// Specialized call for XAI using your 'explainMistake' method
-  Future<String> getMistakeExplanation({
-    required String question,
-    required String studentAns,
-    required String correctAns
-  }) async {
-    _logger.i(" 🔍 Member 1: Requesting XAI feedback...");
-
-    return await _aiService.explainMistake(
-      question: question,
-      studentAns: studentAns,
-      correctAns: correctAns,
-    );
+  /// CRITICAL FIX for Gemma 270M
+  /// Removes Markdown code blocks (```json ... ```) which cause crashes.
+  String _sanitizeJson(String raw) {
+    try {
+      String clean = raw.trim();
+      // Remove markdown tags
+      if (clean.contains('```')) {
+        clean =
+            clean.replaceAll(RegExp(r'^```[a-z]*'), '').replaceAll('```', '');
+      }
+      // Find brackets
+      int start = clean.indexOf('[');
+      int end = clean.lastIndexOf(']');
+      if (start != -1 && end != -1 && end > start) {
+        return clean.substring(start, end + 1);
+      }
+      return "[]";
+    } catch (e) {
+      return "[]";
+    }
   }
 }

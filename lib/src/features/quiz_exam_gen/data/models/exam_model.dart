@@ -5,6 +5,7 @@ class ExamModel {
   final String title;
   final String difficulty;
   final String timestamp;
+  final int timerMinutes; // Added field
   final List<QuestionModel> questions;
 
   ExamModel({
@@ -12,6 +13,7 @@ class ExamModel {
     required this.title,
     required this.difficulty,
     required this.timestamp,
+    this.timerMinutes = 30, // Default to 30 mins
     required this.questions,
   });
 
@@ -22,8 +24,7 @@ class ExamModel {
       'title': title,
       'difficulty': difficulty,
       'timestamp': timestamp,
-      // We don't store questions in the 'exams' table directly; 
-      // they are stored in the 'questions' table linked by ID.
+      'timer_minutes': timerMinutes, // Map to DB column
     };
   }
 
@@ -34,7 +35,8 @@ class ExamModel {
       title: map['title'],
       difficulty: map['difficulty'],
       timestamp: map['timestamp'],
-      questions: [], // Questions are usually loaded via a separate query
+      timerMinutes: map['timer_minutes'] ?? 30, // Retrieve from DB
+      questions: [], // Questions are loaded via a separate query
     );
   }
 }
@@ -42,8 +44,8 @@ class ExamModel {
 class QuestionModel {
   final int? id;
   final int? examId;
-  final String questionText; // <--- This is the field the PDF service needs
-  final dynamic options;     // Can be String (JSON) or List<String>
+  final String questionText;
+  final dynamic options; // Can be String (JSON) or List<String>
   final String correctAnswer;
   final String? explanation;
 
@@ -59,11 +61,13 @@ class QuestionModel {
   /// Create Question object from AI Response (JSON) or Database Map
   factory QuestionModel.fromMap(Map<String, dynamic> map) {
     return QuestionModel(
-      // FIXED: Checks for 'question' (from AI) OR 'question_text' (from DB)
-      questionText: map['question'] ?? map['question_text'] ?? 'No Question Text',
+      // Checks for 'question' (from AI) OR 'question_text' (from DB)
+      questionText:
+          map['question'] ?? map['question_text'] ?? 'No Question Text',
       options: map['options'],
-      // FIXED: Checks for 'answer_index' (AI) OR 'correct_answer' (DB)
-      correctAnswer: map['answer_index']?.toString() ?? map['correct_answer'] ?? '',
+      // Checks for 'answer_index' (AI) OR 'correct_answer' (DB)
+      correctAnswer:
+          map['answer_index']?.toString() ?? map['correct_answer'] ?? '',
       explanation: map['explanation'],
     );
   }
@@ -74,7 +78,7 @@ class QuestionModel {
       'id': id,
       'exam_id': examId,
       'question_text': questionText,
-      // Ensure options are stored as a JSON string
+      // Ensure options are stored as a JSON string if they are a list
       'options': options is List ? jsonEncode(options) : options,
       'correct_answer': correctAnswer,
       'explanation': explanation,

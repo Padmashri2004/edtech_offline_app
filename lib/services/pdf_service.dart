@@ -1,66 +1,77 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'package:pdf_text/pdf_text.dart';
+import 'package:logger/logger.dart';
 
 class PdfService {
+  final Logger _logger = Logger();
+
   /// Step 1: Teacher picks the PDF from local storage
   Future<File?> pickTextbook() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-    );
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
 
-    if (result != null) {
-      return File(result.files.single.path!);
+      if (result != null) {
+        return File(result.files.single.path!);
+      }
+    } catch (e) {
+      _logger.e("Error picking file: $e");
     }
     return null;
   }
 
-  /// Step 2: Read Chapters/Bookmarks from the PDF
+  /// Step 2: Read PDF Info
+  /// Returns the total page count so the app knows the valid range.
   Future<List<Map<String, dynamic>>> getChapters(File file) async {
-    final List<int> bytes = await file.readAsBytes();
-    final PdfDocument document = PdfDocument(inputBytes: bytes);
-    
-    List<Map<String, dynamic>> chapters = [];
-    
-    // Access the internal bookmarks (Table of Contents)
-    PdfBookmarkBase bookmarks = document.bookmarks;
+    try {
+      // PDFDoc is the main class in pdf_text
+      PDFDoc doc = await PDFDoc.fromFile(file);
+      int totalPages = doc.length;
 
-    for (int i = 0; i < bookmarks.count; i++) {
-      PdfBookmark bookmark = bookmarks[i];
-      
-      // Get the page index where the chapter starts
-      int startPage = document.pages.indexOf(bookmark.destination!.page) + 1;
-      
-      // Estimate end page (next bookmark's start or end of book)
-      int endPage = (i + 1 < bookmarks.count) 
-          ? document.pages.indexOf(bookmarks[i + 1].destination!.page)
-          : document.pages.count;
+      _logger.i("PDF Loaded. Total pages: $totalPages");
 
-      chapters.add({
-        'title': bookmark.title,
-        'startPage': startPage,
-        'endPage': endPage,
-      });
+      return [
+        {
+          'title': "Imported Textbook (Full)",
+          'startPage': 1,
+          'endPage': totalPages,
+        }
+      ];
+    } catch (e) {
+      _logger.e("Error reading PDF info: $e");
+      return [];
     }
-
-    document.dispose();
-    return chapters;
   }
 
-  /// Step 3: Extract only the text from a specific chapter (Page Range)
-  Future<String> extractChapterText(File file, int startPage, int endPage) async {
-    final List<int> bytes = await file.readAsBytes();
-    final PdfDocument document = PdfDocument(inputBytes: bytes);
-    
-    // Extract text from the specific range selected by the teacher
-    PdfTextExtractor extractor = PdfTextExtractor(document);
-    String text = extractor.extractText(
-      startPageIndex: startPage - 1, 
-      endPageIndex: endPage - 1
-    );
+  /// Step 3: Extract text from specific page range
+  Future<String> extractChapterText(
+      File file, int startPage, int endPage) async {
+    try {
+      if (!await file.exists()) return "";
 
-    document.dispose();
-    return text;
+      PDFDoc doc = await PDFDoc.fromFile(file);
+      StringBuffer buffer = StringBuffer();
+      int totalPages = doc.length;
+
+      // Validate inputs
+      if (startPage < 1) startPage = 1;
+      if (endPage > totalPages) endPage = totalPages;
+
+      // Loop through pages
+      for (int i = startPage; i <= endPage; i++) {
+        // pdf_text uses 0-based indexing for pages (0 is Page 1).
+        // We use (i - 1) to access the correct page.
+        String pageText = await doc.pageAt(i - 1).text;
+        buffer.writeln(pageText);
+      }
+
+      return buffer.toString();
+    } catch (e) {
+      _logger.e("Error extracting text: $e");
+      return "";
+    }
   }
 }
