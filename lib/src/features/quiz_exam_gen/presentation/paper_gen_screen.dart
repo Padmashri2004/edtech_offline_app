@@ -20,7 +20,8 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
   List<Map<String, dynamic>> _chapters = [];
   bool _isProcessing = false;
 
-  // Mock Students
+  List<String> _selectedTopics = [];
+
   final List<String> _allStudents = [
     "Arun",
     "Bina",
@@ -33,21 +34,54 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
   ];
   final List<String> _basicStudents = [];
   final List<String> _advancedStudents = [];
-
   ExamModel? _generatedBasicExam;
   ExamModel? _generatedAdvancedExam;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    if (args != null && _selectedFile == null) {
+      _selectedFile = args['file'] as File;
+
+      if (args['selection'] != null) {
+        String? title = args['title'];
+        Map<String, List<String>> selectionMap =
+            args['selection'] as Map<String, List<String>>;
+        if (title != null && selectionMap.containsKey(title)) {
+          _selectedTopics = selectionMap[title]!;
+        }
+      }
+      _loadChaptersFromFile(_selectedFile!);
+    }
+  }
+
+  Future<void> _loadChaptersFromFile(File file) async {
+    final chaps = await _pdfService.getChapters(file);
+    if (mounted) {
+      setState(() {
+        _selectedFile = file;
+        _chapters = chaps;
+
+        final args =
+            ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+        if (args != null && args['title'] != null) {
+          try {
+            _selectedChapter =
+                _chapters.firstWhere((c) => c['title'] == args['title']);
+          } catch (e) {
+            // Ignore mismatch
+          }
+        }
+      });
+    }
+  }
 
   Future<void> _pickTextbook() async {
     final file = await _pdfService.pickTextbook();
     if (file != null) {
-      if (!mounted) return;
-      final chaps = await _pdfService.getChapters(file);
-
-      if (!mounted) return;
-      setState(() {
-        _selectedFile = file;
-        _chapters = chaps;
-      });
+      _loadChaptersFromFile(file);
     }
   }
 
@@ -72,45 +106,30 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
   }
 
   Future<void> _generatePapers() async {
-    // 1. Validate Input (Synchronous - Context is safe)
-    if (_selectedFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select a textbook first.")),
-      );
-      return;
-    }
-    if (_selectedChapter == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select a chapter.")),
-      );
-      return;
-    }
-
-    // 2. Capture dependencies & Overlay state BEFORE async gap
+    // 1. Capture dependencies immediately
+    final messenger = ScaffoldMessenger.of(context);
     final genService = context.read<PaperGenerationService>();
-    final messenger = ScaffoldMessenger.of(context); // Capture Messenger
 
-    setState(() {
-      _isProcessing = true;
-    });
+    if (_selectedFile == null || _selectedChapter == null) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text("Please select a textbook and chapter.")));
+      return;
+    }
 
+    setState(() => _isProcessing = true);
     try {
-      final text = await _pdfService.extractChapterText(
-        _selectedFile!,
-        _selectedChapter!['startPage'],
-        _selectedChapter!['endPage'],
-      );
+      final text = await _pdfService.extractChapterText(_selectedFile!,
+          _selectedChapter!['startPage'], _selectedChapter!['endPage']);
 
       final results = await genService.generateDifferentiatedPapers(
         chapterTitle: _selectedChapter!['title'],
         rawContent: text,
         basicStudents: _basicStudents,
         advancedStudents: _advancedStudents,
+        focusTopics: _selectedTopics,
       );
 
-      // Check mounted before using 'setState'
       if (!mounted) return;
-
       setState(() {
         _generatedBasicExam = results['basic'];
         _generatedAdvancedExam = results['advanced'];
@@ -118,23 +137,20 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isProcessing = false;
-      });
-      // Use Captured Messenger (Safe)
+      setState(() => _isProcessing = false);
+      // Use captured messenger (Safe)
       messenger.showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
   Future<void> _exportPdf(ExamModel exam) async {
-    // Capture dependencies BEFORE async gap
-    final exportService = context.read<PdfExportService>();
+    // 1. Capture dependencies immediately
     final messenger = ScaffoldMessenger.of(context);
+    final exportService = context.read<PdfExportService>();
 
     try {
       final file = await exportService.generateExamPdf(exam);
-
-      // Use Captured Messenger (Safe)
+      // Use captured messenger (Safe)
       messenger
           .showSnackBar(SnackBar(content: Text("PDF Saved: ${file.path}")));
     } catch (e) {
@@ -151,14 +167,11 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Content
             ListTile(
               title: Text(
                   _selectedFile?.path.split('/').last ?? "Select Textbook"),
               trailing: ElevatedButton(
-                onPressed: _pickTextbook,
-                child: const Text("Upload"),
-              ),
+                  onPressed: _pickTextbook, child: const Text("Upload")),
             ),
             if (_chapters.isNotEmpty)
               DropdownButton<Map<String, dynamic>>(
@@ -169,18 +182,13 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
                     .map((c) =>
                         DropdownMenuItem(value: c, child: Text(c['title'])))
                     .toList(),
-                onChanged: (v) => setState(() {
-                  _selectedChapter = v;
-                }),
+                onChanged: (v) => setState(() => _selectedChapter = v),
               ),
-
             const Divider(),
-            // 2. Students
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8.0),
-              child: Text("Assign Students to Tiers:",
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
+                padding: EdgeInsets.symmetric(vertical: 8.0),
+                child: Text("Assign Students to Tiers:",
+                    style: TextStyle(fontWeight: FontWeight.bold))),
             SizedBox(
               height: 150,
               child: ListView.builder(
@@ -193,27 +201,20 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         FilterChip(
-                          label: const Text("Basic"),
-                          selected: _basicStudents.contains(name),
-                          onSelected: (_) {
-                            _toggleStudent(name, false);
-                          },
-                        ),
+                            label: const Text("Basic"),
+                            selected: _basicStudents.contains(name),
+                            onSelected: (_) => _toggleStudent(name, false)),
                         const SizedBox(width: 5),
                         FilterChip(
-                          label: const Text("Adv"),
-                          selected: _advancedStudents.contains(name),
-                          onSelected: (_) {
-                            _toggleStudent(name, true);
-                          },
-                        ),
+                            label: const Text("Adv"),
+                            selected: _advancedStudents.contains(name),
+                            onSelected: (_) => _toggleStudent(name, true)),
                       ],
                     ),
                   );
                 },
               ),
             ),
-
             const SizedBox(height: 20),
             if (_isProcessing)
               const Center(child: CircularProgressIndicator())
@@ -227,12 +228,9 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
                     width: double.infinity,
                     child: Center(child: Text("Generate Papers"))),
               ),
-
-            // 3. Output with Review
             const SizedBox(height: 20),
             if (_generatedBasicExam != null)
               _buildExamCard(_generatedBasicExam!, true),
-
             if (_generatedAdvancedExam != null)
               _buildExamCard(_generatedAdvancedExam!, false),
           ],
@@ -251,17 +249,11 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
         subtitle: Text("${exam.questions.length} Questions"),
         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
           IconButton(
-            icon: const Icon(Icons.edit, color: Colors.orange),
-            onPressed: () {
-              _openReviewScreen(exam);
-            },
-          ),
+              icon: const Icon(Icons.edit, color: Colors.orange),
+              onPressed: () => _openReviewScreen(exam)),
           IconButton(
-            icon: const Icon(Icons.download),
-            onPressed: () {
-              _exportPdf(exam);
-            },
-          ),
+              icon: const Icon(Icons.download),
+              onPressed: () => _exportPdf(exam)),
         ]),
       ),
     );
@@ -278,23 +270,15 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
               final q = exam.questions[i];
               return Dismissible(
                 key: UniqueKey(),
-                onDismissed: (_) {
-                  setInnerState(() {
-                    exam.questions.removeAt(i);
-                  });
-                },
+                onDismissed: (_) =>
+                    setInnerState(() => exam.questions.removeAt(i)),
                 background: Container(
                     color: Colors.red, child: const Icon(Icons.delete)),
                 child: ListTile(
                   title: Text(q.questionText),
                   subtitle: Text(q.correctAnswer),
-                  onTap: () {
-                    _showEditDialog(ctx, q, (newQ) {
-                      setInnerState(() {
-                        exam.questions[i] = newQ;
-                      });
-                    });
-                  },
+                  onTap: () => _showEditDialog(ctx, q,
+                      (newQ) => setInnerState(() => exam.questions[i] = newQ)),
                 ),
               );
             },
@@ -303,18 +287,16 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
         floatingActionButton: FloatingActionButton(
           child: const Icon(Icons.save),
           onPressed: () async {
-            // 1. Capture dependencies synchronous (BEFORE await)
+            // 1. Capture dependencies Synchronously (BEFORE await)
             final repo = context.read<QuizRepository>();
-            final nav = Navigator.of(context); // Capture Navigator
+            final navigator = Navigator.of(context);
 
-            // 2. Perform Async Ops
-            if (exam.id != null) {
-              await repo.deleteExam(exam.id!);
-            }
+            // 2. Perform Async
+            if (exam.id != null) await repo.deleteExam(exam.id!);
             await repo.saveExam(exam);
 
-            // 3. Use Captured Navigator (Safe)
-            nav.pop();
+            // 3. Use Captured navigator (Safe)
+            navigator.pop();
           },
         ),
       );
@@ -325,51 +307,39 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
       BuildContext ctx, QuestionModel q, Function(QuestionModel) onSave) {
     String txt = q.questionText;
     String ans = q.correctAnswer;
-
     showDialog(
         context: ctx,
         builder: (c) => AlertDialog(
               title: const Text("Edit Question"),
               content: Column(mainAxisSize: MainAxisSize.min, children: [
                 TextField(
-                  controller: TextEditingController(text: txt),
-                  onChanged: (v) {
-                    txt = v;
-                  },
-                  decoration: const InputDecoration(labelText: "Question"),
-                  maxLines: 3,
-                ),
+                    controller: TextEditingController(text: txt),
+                    onChanged: (v) => txt = v,
+                    decoration: const InputDecoration(labelText: "Question"),
+                    maxLines: 3),
                 const SizedBox(height: 10),
                 TextField(
-                  controller: TextEditingController(text: ans),
-                  onChanged: (v) {
-                    ans = v;
-                  },
-                  decoration: const InputDecoration(labelText: "Answer"),
-                  maxLines: 2,
-                ),
+                    controller: TextEditingController(text: ans),
+                    onChanged: (v) => ans = v,
+                    decoration: const InputDecoration(labelText: "Answer"),
+                    maxLines: 2),
               ]),
               actions: [
                 TextButton(
-                  onPressed: () {
-                    Navigator.pop(c);
-                  },
-                  child: const Text("Cancel"),
-                ),
+                    onPressed: () => Navigator.pop(c),
+                    child: const Text("Cancel")),
                 ElevatedButton(
-                  onPressed: () {
-                    onSave(QuestionModel(
-                      id: q.id,
-                      examId: q.examId,
-                      questionText: txt,
-                      correctAnswer: ans,
-                      options: q.options,
-                      explanation: q.explanation,
-                    ));
-                    Navigator.pop(c);
-                  },
-                  child: const Text("Save"),
-                ),
+                    onPressed: () {
+                      onSave(QuestionModel(
+                          id: q.id,
+                          examId: q.examId,
+                          questionText: txt,
+                          correctAnswer: ans,
+                          options: q.options,
+                          explanation: q.explanation));
+                      Navigator.pop(c);
+                    },
+                    child: const Text("Save")),
               ],
             ));
   }

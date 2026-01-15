@@ -19,24 +19,31 @@ class PaperGenerationService {
     required String rawContent,
     required List<String> basicStudents,
     required List<String> advancedStudents,
+    List<String>? focusTopics, // NEW
   }) async {
     ExamModel? basicExam;
     ExamModel? advancedExam;
 
     // --- 1. BASIC PAPER (100 Marks) ---
     if (basicStudents.isNotEmpty) {
-      _logger.i("🏗️ Generating BASIC Paper (7 Sections)...");
+      _logger.i(" 🏗️  Generating BASIC Paper (7 Sections)...");
       List<QuestionModel> basicQ = [];
-
-      // Chained Generation
-      basicQ.addAll(await _genSection(rawContent, 'Basic', 'MCQ', 5));
-      basicQ.addAll(
-          await _genSection(rawContent, 'Basic', 'Fill-up', 5, hints: true));
-      basicQ.addAll(await _genSection(rawContent, 'Basic', 'OddOneOut', 5));
-      basicQ.addAll(await _genSection(rawContent, 'Basic', 'Rearrange', 5));
-      basicQ.addAll(await _genSection(rawContent, 'Basic', 'MatchIt', 5));
-      basicQ.addAll(await _genSection(rawContent, 'Basic', 'ShortAns', 7));
-      basicQ.addAll(await _genSection(rawContent, 'Basic', 'LongAns', 7));
+      // Pass focusTopics to every section call
+      basicQ.addAll(await _genSection(rawContent, 'Basic', 'MCQ', 5,
+          topics: focusTopics));
+      basicQ.addAll(await _genSection(rawContent, 'Basic', 'Fill-up', 5,
+          hints: true, topics: focusTopics));
+      basicQ.addAll(await _genSection(rawContent, 'Basic', 'OddOneOut', 5,
+          topics: focusTopics));
+      basicQ.addAll(await _genSection(rawContent, 'Basic', 'Rearrange', 5,
+          topics: focusTopics));
+      basicQ.addAll(await _genSection(rawContent, 'Basic', 'MatchIt', 5,
+          topics: focusTopics));
+      basicQ.addAll(await _genSection(rawContent, 'Basic', 'ShortAns', 7,
+          topics: focusTopics)); // 5x5=25 marks
+      basicQ.addAll(await _genSection(rawContent, 'Basic', 'LongAns', 7,
+          topics:
+              focusTopics)); // 5x10=50 marks (Adjust count in prompt if needed)
 
       basicExam = ExamModel(
         title: "$chapterTitle (Basic)",
@@ -49,18 +56,23 @@ class PaperGenerationService {
 
     // --- 2. ADVANCED PAPER (100 Marks) ---
     if (advancedStudents.isNotEmpty) {
-      _logger.i("🏗️ Generating ADVANCED Paper (7 Sections)...");
+      _logger.i(" 🏗️  Generating ADVANCED Paper (7 Sections)...");
       List<QuestionModel> advQ = [];
-
-      advQ.addAll(await _genSection(rawContent, 'Advanced', 'MCQ', 5));
+      advQ.addAll(await _genSection(rawContent, 'Advanced', 'MCQ', 5,
+          topics: focusTopics));
       advQ.addAll(await _genSection(rawContent, 'Advanced', 'Fill-up', 5,
-          hints: false));
-      advQ.addAll(await _genSection(rawContent, 'Advanced', 'True/False', 5));
-      advQ.addAll(
-          await _genSection(rawContent, 'Advanced', 'AssertionReason', 5));
-      advQ.addAll(await _genSection(rawContent, 'Advanced', 'ShortAns', 7));
-      advQ.addAll(await _genSection(rawContent, 'Advanced', 'CaseStudy', 1));
-      advQ.addAll(await _genSection(rawContent, 'Advanced', 'LongAns', 7));
+          hints: false, topics: focusTopics));
+      advQ.addAll(await _genSection(rawContent, 'Advanced', 'True/False', 5,
+          topics: focusTopics));
+      advQ.addAll(await _genSection(
+          rawContent, 'Advanced', 'AssertionReason', 5,
+          topics: focusTopics));
+      advQ.addAll(await _genSection(rawContent, 'Advanced', 'ShortAns', 7,
+          topics: focusTopics));
+      advQ.addAll(await _genSection(rawContent, 'Advanced', 'CaseStudy', 1,
+          topics: focusTopics));
+      advQ.addAll(await _genSection(rawContent, 'Advanced', 'LongAns', 7,
+          topics: focusTopics));
 
       advancedExam = ExamModel(
         title: "$chapterTitle (Advanced)",
@@ -76,17 +88,17 @@ class PaperGenerationService {
 
   Future<List<QuestionModel>> _genSection(
       String text, String diff, String type, int count,
-      {bool hints = false}) async {
+      {bool hints = false, List<String>? topics}) async {
     try {
-      // Breathing room for the device
-      await Future.delayed(const Duration(milliseconds: 100));
-
+      await Future.delayed(const Duration(milliseconds: 100)); // Breathing room
       final rawList = await _aiRepository.getQuizFromChapter(
           rawContent: text,
           difficulty: diff,
           type: type,
           count: count,
-          hints: hints);
+          hints: hints,
+          focusTopics: topics // Pass focus topics
+          );
 
       return rawList.map((q) {
         var model = QuestionModel.fromMap(q);

@@ -4,6 +4,7 @@ import 'package:logger/logger.dart';
 import 'package:edtech_offline_app/src/core/ai/ai_service.dart';
 import 'package:edtech_offline_app/src/core/utils/textbook_parser.dart';
 import 'package:edtech_offline_app/services/ai_prompt_service.dart';
+// REMOVED: import 'package:flutter_gemma/flutter_gemma.dart';
 
 class AIRepository {
   final AIService _aiService;
@@ -17,7 +18,8 @@ class AIRepository {
     required String difficulty,
     required String type,
     int count = 5,
-    bool hints = false, // Added param
+    bool hints = false,
+    List<String>? focusTopics, // NEW Param
   }) async {
     try {
       final chunks = TextbookParser.cleanAndChunk(rawContent);
@@ -28,13 +30,17 @@ class AIRepository {
       final context = chunks[random.nextInt(chunks.length)];
 
       final prompt = _promptService.buildSectionPrompt(
-          text: context,
-          difficulty: difficulty,
-          sectionType: type,
-          count: count,
-          hintsIncluded: hints);
+        text: context,
+        difficulty: difficulty,
+        sectionType: type,
+        count: count,
+        hintsIncluded: hints,
+        focusTopics: focusTopics, // Pass it down
+      );
 
-      _logger.i("🧠 Calling AI for $difficulty - $type...");
+      _logger.i(
+          " 🧠  Calling AI for $difficulty - $type (${focusTopics?.length ?? 0} topics)...");
+
       // Max tokens 2000 is safe for Nano model
       final response =
           await _aiService.generateAssessment(prompt: prompt, maxTokens: 2000);
@@ -42,13 +48,11 @@ class AIRepository {
       String cleanJson = _sanitizeJson(response);
       return List<Map<String, dynamic>>.from(jsonDecode(cleanJson));
     } catch (e) {
-      _logger.e("❌ AI Repo Error: $e");
+      _logger.e(" ❌  AI Repo Error: $e");
       return [];
     }
   }
 
-  /// CRITICAL FIX for Gemma 270M
-  /// Removes Markdown code blocks (```json ... ```) which cause crashes.
   String _sanitizeJson(String raw) {
     try {
       String clean = raw.trim();

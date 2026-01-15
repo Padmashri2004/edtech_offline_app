@@ -3,26 +3,33 @@ import 'package:logger/logger.dart';
 class AiPromptService {
   final Logger _logger = Logger();
 
-  /// Generates the prompt based on level, content, AND question type
-  /// Optimized for Gemma 270M (Nano) using One-Shot Prompting
+  /// Generates the prompt based on level, content, question type AND focused topics.
+  /// Optimized for Gemma 270M (Nano) using One-Shot Prompting.
   String buildSectionPrompt({
     required String text,
     required String difficulty, // 'Basic' or 'Advanced'
-    required String
-        sectionType, // 'MCQ', 'Fill-up', 'OddOneOut', 'Rearrange', 'MatchIt', 'AssertionReason', 'ShortAns', 'LongAns', 'CaseStudy'
+    required String sectionType,
     required int count,
     bool hintsIncluded = false, // For Basic Fill-ups
+    List<String>? focusTopics, // NEW: Focus on specific topics
   }) {
     String typeRules = _getRulesForType(sectionType, hintsIncluded);
     String jsonExample = _getExampleForType(sectionType);
 
     // Truncate text to avoid memory overflow (Safe limit for Nano model)
-    String safeText = text.length > 1500 ? text.substring(0, 1500) : text;
+    String safeText = text.length > 2000 ? text.substring(0, 2000) : text;
+
+    // Construct the Topic Focus string if topics are provided
+    String topicInstruction = "";
+    if (focusTopics != null && focusTopics.isNotEmpty) {
+      topicInstruction =
+          "FOCUS specifically on these concepts: ${focusTopics.join(', ')}.";
+    }
 
     String prompt = """
 Analyze the text and generate $count "$sectionType" questions.
 Difficulty: $difficulty.
-
+$topicInstruction
 RULES:
 1. OUTPUT ONLY A RAW JSON ARRAY. No markdown.
 2. $typeRules
@@ -35,6 +42,7 @@ CONTENT:
 
 GENERATE JSON:
 """;
+
     _logger.d("Prompt for $sectionType: $prompt");
     return prompt;
   }
@@ -61,7 +69,8 @@ GENERATE JSON:
       case 'LongAns':
         return 'Generate valid academic questions. Leave "options" empty []. Provide key points in "correct_answer".';
       case 'CaseStudy':
-        return 'Generate a short scenario (3 sentences) based on the text as "question". Provide a specific question about it in "explanation" field.';
+        // CRITICAL FIX: Put both Scenario and Question in the 'question' field so PDF sees it.
+        return 'Generate a short scenario (3 sentences) followed immediately by a specific question based on it. Put the ENTIRE text (Scenario + Question) in "question". Put the answer key in "explanation".';
       default:
         return 'Standard question format. Put answer in "correct_answer".';
     }
@@ -81,15 +90,5 @@ GENERATE JSON:
     }
     // Default for Text answers
     return '[{"question": "Explain X?", "options": [], "correct_answer": "X is...", "explanation": "..."}]';
-  }
-
-  // Kept for legacy compatibility if needed
-  String buildQuizPrompt(
-      {required String text,
-      required String level,
-      required String type,
-      int count = 5}) {
-    return buildSectionPrompt(
-        text: text, difficulty: level, sectionType: type, count: count);
   }
 }

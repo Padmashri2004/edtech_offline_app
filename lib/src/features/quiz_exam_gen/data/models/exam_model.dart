@@ -5,7 +5,8 @@ class ExamModel {
   final String title;
   final String difficulty;
   final String timestamp;
-  final int timerMinutes; // Added field
+  final int timerMinutes;
+  final List<String> assignedStudents; // NEW: Track who this exam is for
   final List<QuestionModel> questions;
 
   ExamModel({
@@ -13,7 +14,8 @@ class ExamModel {
     required this.title,
     required this.difficulty,
     required this.timestamp,
-    this.timerMinutes = 30, // Default to 30 mins
+    this.timerMinutes = 30,
+    this.assignedStudents = const [], // Default to empty (open for all)
     required this.questions,
   });
 
@@ -24,19 +26,32 @@ class ExamModel {
       'title': title,
       'difficulty': difficulty,
       'timestamp': timestamp,
-      'timer_minutes': timerMinutes, // Map to DB column
+      'timer_minutes': timerMinutes,
+      // Store list as JSON string
+      'assigned_students': jsonEncode(assignedStudents),
     };
   }
 
   /// Create Exam object from Database Map
   factory ExamModel.fromMap(Map<String, dynamic> map) {
+    // Parse assigned_students safely
+    List<String> students = [];
+    if (map['assigned_students'] != null) {
+      try {
+        students = List<String>.from(jsonDecode(map['assigned_students']));
+      } catch (e) {
+        // Fallback if parsing fails
+      }
+    }
+
     return ExamModel(
       id: map['id'],
       title: map['title'],
       difficulty: map['difficulty'],
       timestamp: map['timestamp'],
-      timerMinutes: map['timer_minutes'] ?? 30, // Retrieve from DB
-      questions: [], // Questions are loaded via a separate query
+      timerMinutes: map['timer_minutes'] ?? 30,
+      assignedStudents: students,
+      questions: [], // Questions loaded separately
     );
   }
 }
@@ -45,7 +60,7 @@ class QuestionModel {
   final int? id;
   final int? examId;
   final String questionText;
-  final dynamic options; // Can be String (JSON) or List<String>
+  final dynamic options;
   final String correctAnswer;
   final String? explanation;
 
@@ -58,27 +73,22 @@ class QuestionModel {
     this.explanation,
   });
 
-  /// Create Question object from AI Response (JSON) or Database Map
   factory QuestionModel.fromMap(Map<String, dynamic> map) {
     return QuestionModel(
-      // Checks for 'question' (from AI) OR 'question_text' (from DB)
       questionText:
           map['question'] ?? map['question_text'] ?? 'No Question Text',
       options: map['options'],
-      // Checks for 'answer_index' (AI) OR 'correct_answer' (DB)
       correctAnswer:
           map['answer_index']?.toString() ?? map['correct_answer'] ?? '',
       explanation: map['explanation'],
     );
   }
 
-  /// Convert Question object to Map for Database storage
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'exam_id': examId,
       'question_text': questionText,
-      // Ensure options are stored as a JSON string if they are a list
       'options': options is List ? jsonEncode(options) : options,
       'correct_answer': correctAnswer,
       'explanation': explanation,
