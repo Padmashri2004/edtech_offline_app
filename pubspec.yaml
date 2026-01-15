@@ -9,26 +9,36 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
   # AI & Persistence
   flutter_gemma: ^0.12.0
   sqflite: ^2.4.2
   path: ^1.9.1
-  # File Management & PDF Processing (Mod 1 & 6)
+
+  # File Management
   path_provider: ^2.1.5
-  pdf_render: ^1.4.12
-  crypto: ^3.0.7
-  syncfusion_flutter_pdf: ^21.1.35  # Helps us read the PDF content
   file_picker: ^5.3.0
   logger: ^2.5.0
   provider: ^6.1.1
   hive: ^2.2.3
   hive_flutter: ^1.1.0
+  shared_preferences: ^2.2.2
+
+  # --- PDF PACKAGES ---
+  pdf: ^3.10.0      # For generating PDFs (Mod 6)
+  printing: ^5.11.0 # For layout helpers
+  pdf_text: ^0.5.0  # For reading textbooks (Mod 1)
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  # FIXED: Moved from dependencies to dev_dependencies
   flutter_lints: ^5.0.0
+
+# --- THE FIX ---
+# This forces the project to use the newer 'http' version required by Gemma,
+# ignoring the old constraint requested by pdf_text.
+dependency_overrides:
+  http: ^1.4.0
 
 flutter:
   uses-material-design: true

@@ -1,3 +1,4 @@
+// FIXED: Removed unused sqflite import
 import 'package:edtech_offline_app/src/core/database/database_helper.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
 import 'package:logger/logger.dart';
@@ -10,10 +11,33 @@ class QuizRepository {
   Future<int> saveExam(ExamModel exam) async {
     try {
       final db = await _dbHelper.database;
-      _logger.i("💾 Member 1: Saving exam '${exam.title}' to database...");
-      return await db.insert('exams', exam.toMap());
+
+      // Use a Transaction to ensure both Exam and Questions are saved
+      return await db.transaction((txn) async {
+        _logger.i(" 💾  Member 1: Saving exam header '${exam.title}'...");
+
+        int examId = await txn.insert('exams', exam.toMap());
+
+        int qCount = 0;
+        for (var question in exam.questions) {
+          final questionToSave = QuestionModel(
+            examId: examId,
+            questionText: question.questionText,
+            options: question.options,
+            correctAnswer: question.correctAnswer,
+            explanation: question.explanation,
+          );
+
+          await txn.insert('questions', questionToSave.toMap());
+          qCount++;
+        }
+
+        _logger.i(
+            " ✅  Member 1: Successfully saved Exam #$examId with $qCount questions.");
+        return examId;
+      });
     } catch (e) {
-      _logger.e("❌ Member 1: Error saving exam: $e");
+      _logger.e(" ❌  Member 1: Error saving exam: $e");
       return -1;
     }
   }
@@ -22,19 +46,41 @@ class QuizRepository {
   Future<List<ExamModel>> getAllExams() async {
     try {
       final db = await _dbHelper.database;
-      final List<Map<String, dynamic>> maps = await db.query('exams', orderBy: 'timestamp DESC');
-      
-      return List.generate(maps.length, (i) => ExamModel.fromMap(maps[i]));
+      final List<Map<String, dynamic>> maps =
+          await db.query('exams', orderBy: 'timestamp DESC');
+
+      List<ExamModel> exams = [];
+
+      for (var map in maps) {
+        var exam = ExamModel.fromMap(map);
+
+        final List<Map<String, dynamic>> qMaps = await db
+            .query('questions', where: 'exam_id = ?', whereArgs: [exam.id]);
+
+        List<QuestionModel> questions =
+            List.generate(qMaps.length, (i) => QuestionModel.fromMap(qMaps[i]));
+
+        exams.add(ExamModel(
+          id: exam.id,
+          title: exam.title,
+          difficulty: exam.difficulty,
+          timestamp: exam.timestamp,
+          questions: questions,
+        ));
+      }
+
+      return exams;
     } catch (e) {
-      _logger.e("❌ Member 1: Error fetching exams: $e");
+      _logger.e(" ❌  Member 1: Error fetching exams: $e");
       return [];
     }
   }
 
-  /// Deletes an exam (e.g., if a teacher wants to recreate it)
+  /// Deletes an exam
   Future<void> deleteExam(int id) async {
     final db = await _dbHelper.database;
     await db.delete('exams', where: 'id = ?', whereArgs: [id]);
-    _logger.i("🗑️ Member 1: Exam $id deleted.");
+    await db.delete('questions', where: 'exam_id = ?', whereArgs: [id]);
+    _logger.i(" 🗑️  Member 1: Exam $id deleted.");
   }
 }
