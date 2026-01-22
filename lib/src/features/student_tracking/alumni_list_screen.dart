@@ -1,20 +1,33 @@
 import 'package:flutter/material.dart';
-///import '../../core/database/database_helper.dart';
+import '../../core/database/database_helper.dart';
 
-/// Displays list of alumni available for mentorship
-/// Uses `alumni_profiles` table
 class AlumniListScreen extends StatelessWidget {
- /// final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
   AlumniListScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    
-    // UI will be implemented later
-    return const Scaffold(
-      body: Center(
-        child: Text('Alumni mentorship list coming soon'),
+    return Scaffold(
+      appBar: AppBar(title: const Text("Available Alumni")),
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        // Fetches profiles from the database you created
+        future: _dbHelper.database.then((db) => db.query('alumni_profiles')),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          
+          return ListView.builder(
+            itemCount: snapshot.data!.length,
+            itemBuilder: (context, index) {
+              final alumni = snapshot.data![index];
+              return ListTile(
+                title: Text(alumni['name']),
+                subtitle: Text(alumni['expertise']),
+                trailing: const Icon(Icons.person_add),
+              );
+            },
+          );
+        },
       ),
     );
   }

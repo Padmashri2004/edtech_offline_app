@@ -1,23 +1,33 @@
 import '../../core/database/database_helper.dart';
+//import 'package:sqflite/sqflite.dart';
 
-/// Manages study goals for students
-/// Uses `study_goals` table
 class GoalSetterService {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  /// Create a new study goal
   Future<void> createGoal({
     required String studentId,
     required String goalTitle,
     required String targetDate,
   }) async {
-    final _ = await _dbHelper.database;
-
-    // TODO: Insert into study_goals table
+    final db = await _dbHelper.database;
+    // Inserts a new study goal into the database
+    await db.insert('study_goals', {
+      'student_id': studentId,
+      'goal_title': goalTitle,
+      'target_date': targetDate,
+      'status': 'pending',
+      'created_at': DateTime.now().toIso8601String(),
+    });
   }
 
-  /// Mark a goal as completed
   Future<void> completeGoal(int goalId) async {
-    // TODO: Update status to 'completed'
+    final db = await _dbHelper.database;
+    // Marks a specific goal as completed
+    await db.update(
+      'study_goals',
+      {'status': 'completed'},
+      where: 'id = ?',
+      whereArgs: [goalId],
+    );
   }
 }
