@@ -1,5 +1,5 @@
 name: edtech_offline_app
-description: "Offline EdTech portal with Gemma 3 AI and Image Library"
+description: "Offline EdTech portal with Gemma 3 AI"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -14,7 +14,7 @@ dependencies:
   flutter_gemma: ^0.12.0
   sqflite: ^2.4.2
   path: ^1.9.1
-
+  
   # File Management
   path_provider: ^2.1.5
   file_picker: ^5.3.0
@@ -23,20 +23,23 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   shared_preferences: ^2.2.2
-
-  # --- PDF PACKAGES ---
-  pdf: ^3.10.0      # For generating PDFs (Mod 6)
-  printing: ^5.11.0 # For layout helpers
-  pdf_text: ^0.5.0  # For reading textbooks (Mod 1)
+  uuid: ^4.2.2
+  pdf_render: ^1.1.1
+  
+  # Image & Crypto (REQUIRED)
+  image: ^4.1.7
+  crypto: ^3.0.3  # ← ADD THIS FOR QUESTION HASHING
+  
+  # PDF Packages
+  pdf: ^3.10.0
+  printing: ^5.11.0
+  pdf_text: ^0.5.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
 
-# --- THE FIX ---
-# This forces the project to use the newer 'http' version required by Gemma,
-# ignoring the old constraint requested by pdf_text.
 dependency_overrides:
   http: ^1.4.0
 

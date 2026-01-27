@@ -3,92 +3,120 @@ import 'package:logger/logger.dart';
 class AiPromptService {
   final Logger _logger = Logger();
 
-  /// Generates the prompt based on level, content, question type AND focused topics.
-  /// Optimized for Gemma 270M (Nano) using One-Shot Prompting.
+  // FIXED: Optimized for Gemma 3-270M (512 token context window)
+  static const int maxTextLength = 1200; // Reduced from 2000
+  static const int recommendedQuestionsPerCall = 3; // Reduced from 5
+  static const int maxPromptTokens = 300; // Leave 200+ for output
+
   String buildSectionPrompt({
     required String text,
-    required String difficulty, // 'Basic' or 'Advanced'
+    required String difficulty,
     required String sectionType,
     required int count,
-    bool hintsIncluded = false, // For Basic Fill-ups
-    List<String>? focusTopics, // NEW: Focus on specific topics
+    bool hintsIncluded = false,
+    List<String>? focusTopics,
   }) {
-    String typeRules = _getRulesForType(sectionType, hintsIncluded);
-    String jsonExample = _getExampleForType(sectionType);
+    String safeText =
+        text.length > maxTextLength ? text.substring(0, maxTextLength) : text;
 
-    // Truncate text to avoid memory overflow (Safe limit for Nano model)
-    String safeText = text.length > 2000 ? text.substring(0, 2000) : text;
-
-    // Construct the Topic Focus string if topics are provided
-    String topicInstruction = "";
+    String focusContext = '';
     if (focusTopics != null && focusTopics.isNotEmpty) {
-      topicInstruction =
-          "FOCUS specifically on these concepts: ${focusTopics.join(', ')}.";
+      focusContext = '\nFocus: ${focusTopics.join(", ")}';
     }
 
-    String prompt = """
-Analyze the text and generate $count "$sectionType" questions.
-Difficulty: $difficulty.
-$topicInstruction
-RULES:
-1. OUTPUT ONLY A RAW JSON ARRAY. No markdown.
-2. $typeRules
+    // FIXED: Add difficulty-specific instructions
+    String difficultyInstructions = _getDifficultyInstructions(difficulty);
 
-EXAMPLE JSON FORMAT:
-$jsonExample
+    String prompt = "";
 
-CONTENT:
-"$safeText"
+    if (sectionType == 'PictureBased') {
+      prompt = """
+List $count visual concepts as JSON: [{"topic":"X","answer":"Y"}]
+$focusContext
+Text: "$safeText"
+JSON only:""";
+    } else if (sectionType == 'WhoSaidThis') {
+      prompt = """
+Find $count quotes/laws as JSON: [{"q":"Who said X?","a":"Name"}]
+$focusContext
+Text: "$safeText"
+JSON only:""";
+    } else if (sectionType == 'LongAns' || sectionType == 'ShortAns') {
+      String ansLength =
+          sectionType == 'LongAns' ? '5-7 sentences' : '2-3 sentences';
 
-GENERATE JSON:
-""";
+      prompt = """
+Generate $count questions. Answer length: $ansLength.
+$difficultyInstructions
+$focusContext
+Text: "$safeText"
+JSON: [{"q":"Explain...","a":"Answer"}]""";
+    } else {
+      String rules = _getRules(sectionType, hintsIncluded);
 
-    _logger.d("Prompt for $sectionType: $prompt");
+      prompt = """
+Generate $count $sectionType questions. $difficultyInstructions
+$rules
+$focusContext
+Text: "$safeText"
+JSON: [{"q":"...","o":["A","B"],"a":"...","e":"..."}]""";
+    }
+
+    _logger.d(
+        "🔹 Prompt for $sectionType ($count questions) - ${prompt.length} chars");
     return prompt;
   }
 
-  String _getRulesForType(String type, bool hints) {
-    switch (type) {
-      case 'MCQ':
-        return 'Create 4 options. "answer_index" (0-3). Include plausible distractors.';
-      case 'Fill-up':
-        return hints
-            ? 'Question must have "_______". Provide a hint in brackets at the end. Put answer in "correct_answer".'
-            : 'Question must have "_______". NO hints. Put answer in "correct_answer".';
-      case 'True/False':
-        return 'Options must be ["True", "False"]. Answer index 0 for True, 1 for False.';
-      case 'OddOneOut':
-        return 'Provide 4 options in "options". One is different. Explain why in "explanation".';
-      case 'Rearrange':
-        return 'Provide a jumbled sentence as a List of strings in "options". Put the correct full sentence in "correct_answer".';
-      case 'MatchIt':
-        return 'Generate a pair. Put Column A item in "question" and Column B match in "correct_answer". Ignore options.';
-      case 'AssertionReason':
-        return 'Format: Question = "Assertion: [A]... Reason: [R]...". Options=["A & R true, R explains A", "A & R true, but R does not explain", "A true, R false", "A false, R true"]. Answer index 0-3.';
-      case 'ShortAns':
-      case 'LongAns':
-        return 'Generate valid academic questions. Leave "options" empty []. Provide key points in "correct_answer".';
-      case 'CaseStudy':
-        // CRITICAL FIX: Put both Scenario and Question in the 'question' field so PDF sees it.
-        return 'Generate a short scenario (3 sentences) followed immediately by a specific question based on it. Put the ENTIRE text (Scenario + Question) in "question". Put the answer key in "explanation".';
+  // NEW: Difficulty-based instruction generation
+  String _getDifficultyInstructions(String difficulty) {
+    switch (difficulty.toLowerCase()) {
+      case 'easy':
+      case 'basic':
+        return 'Use simple language. Focus on recall.';
+      case 'medium':
+        return 'Use moderate vocabulary. Include application.';
+      case 'hard':
+      case 'advanced':
+        return 'Use advanced terms. Multi-step reasoning.';
       default:
-        return 'Standard question format. Put answer in "correct_answer".';
+        return '';
     }
   }
 
-  String _getExampleForType(String type) {
-    if (type == 'MCQ' || type == 'OddOneOut') {
-      return '[{"question": "Sample Q?", "options": ["A","B","C","D"], "answer_index": 0, "correct_answer": "A", "explanation": "..."}]';
-    } else if (type == 'MatchIt') {
-      return '[{"question": "Photosynthesis", "correct_answer": "Chlorophyll", "options": [], "answer_index": 0}]';
-    } else if (type == 'Rearrange') {
-      return '[{"question": "Rearrange words", "options": ["is", "Blue", "sky"], "correct_answer": "Blue is sky", "answer_index": 0}]';
-    } else if (type == 'AssertionReason') {
-      return '[{"question": "Assertion: X. Reason: Y.", "options": ["A&R True...", "A&R False..."], "answer_index": 0, "correct_answer": "A&R True..."}]';
-    } else if (type == 'Fill-up') {
-      return '[{"question": "The sky is _______.", "correct_answer": "Blue", "options": [], "answer_index": 0}]';
+  String _getRules(String type, bool hints) {
+    switch (type) {
+      case 'MCQ':
+        return '''4 options. Wrong answers must be plausible and related.
+Format: "o":["A","B","C","D"]''';
+
+      case 'Fill-up':
+        return hints
+            ? '''Blank: _____. Hint in brackets (function/type).
+NO letter hints. Format: "o":[]'''
+            : '''Blank: _____. No hints. Format: "o":[]''';
+
+      case 'True/False':
+        return '''Clear factual statements. Format: "o":["True","False"]''';
+
+      case 'Rearrange':
+        return '''Jumbled words forming sentence.
+Format: "o":["word","jumbled"],"a":"Correct sentence"''';
+
+      case 'MatchIt':
+        return '''Term and definition pairs. Format: "q":"Item A","a":"Match B","o":[]''';
+
+      case 'OddOneOut':
+        return '''4 items, 1 different. All plausible.
+Format: "o":["Item1","Item2","Item3","Item4"],"a":"Odd item"''';
+
+      default:
+        return '"o":[]';
     }
-    // Default for Text answers
-    return '[{"question": "Explain X?", "options": [], "correct_answer": "X is...", "explanation": "..."}]';
+  }
+
+  bool isPromptOptimized(String prompt) {
+    return prompt.length < maxPromptTokens * 4 && // ~4 chars per token
+        prompt.contains('JSON') &&
+        !prompt.contains('complex reasoning');
   }
 }

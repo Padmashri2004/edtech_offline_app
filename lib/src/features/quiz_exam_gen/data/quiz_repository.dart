@@ -1,4 +1,3 @@
-// FIXED: Removed unused sqflite import
 import 'package:edtech_offline_app/src/core/database/database_helper.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
 import 'package:logger/logger.dart';
@@ -26,6 +25,8 @@ class QuizRepository {
             options: question.options,
             correctAnswer: question.correctAnswer,
             explanation: question.explanation,
+            marks: question.marks, // ✅ ADD THIS LINE
+            imagePath: question.imagePath, // ✅ ADD THIS LINE
           );
 
           await txn.insert('questions', questionToSave.toMap());

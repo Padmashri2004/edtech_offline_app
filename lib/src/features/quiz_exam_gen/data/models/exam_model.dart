@@ -1,3 +1,5 @@
+// C:\Users\Admin\edtech_offline_app\lib\src\features\quiz_exam_gen\data\models\exam_model.dart
+
 import 'dart:convert';
 
 class ExamModel {
@@ -6,7 +8,7 @@ class ExamModel {
   final String difficulty;
   final String timestamp;
   final int timerMinutes;
-  final List<String> assignedStudents; // NEW: Track who this exam is for
+  final List<String> assignedStudents;
   final List<QuestionModel> questions;
 
   ExamModel({
@@ -15,11 +17,12 @@ class ExamModel {
     required this.difficulty,
     required this.timestamp,
     this.timerMinutes = 30,
-    this.assignedStudents = const [], // Default to empty (open for all)
+    this.assignedStudents = const [],
     required this.questions,
   });
 
-  /// Convert Exam object to Map for Database storage
+  int get totalMarks => questions.fold(0, (sum, q) => sum + q.marks);
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -27,23 +30,17 @@ class ExamModel {
       'difficulty': difficulty,
       'timestamp': timestamp,
       'timer_minutes': timerMinutes,
-      // Store list as JSON string
       'assigned_students': jsonEncode(assignedStudents),
     };
   }
 
-  /// Create Exam object from Database Map
   factory ExamModel.fromMap(Map<String, dynamic> map) {
-    // Parse assigned_students safely
     List<String> students = [];
     if (map['assigned_students'] != null) {
       try {
         students = List<String>.from(jsonDecode(map['assigned_students']));
-      } catch (e) {
-        // Fallback if parsing fails
-      }
+      } catch (e) {/* ignore */}
     }
-
     return ExamModel(
       id: map['id'],
       title: map['title'],
@@ -51,7 +48,7 @@ class ExamModel {
       timestamp: map['timestamp'],
       timerMinutes: map['timer_minutes'] ?? 30,
       assignedStudents: students,
-      questions: [], // Questions loaded separately
+      questions: [],
     );
   }
 }
@@ -63,6 +60,8 @@ class QuestionModel {
   final dynamic options;
   final String correctAnswer;
   final String? explanation;
+  final int marks;
+  final String? imagePath; // ✅ ADDED THIS FIELD
 
   QuestionModel({
     this.id,
@@ -71,6 +70,8 @@ class QuestionModel {
     required this.options,
     required this.correctAnswer,
     this.explanation,
+    this.marks = 1,
+    this.imagePath, // ✅ ADDED TO CONSTRUCTOR
   });
 
   factory QuestionModel.fromMap(Map<String, dynamic> map) {
@@ -81,6 +82,8 @@ class QuestionModel {
       correctAnswer:
           map['answer_index']?.toString() ?? map['correct_answer'] ?? '',
       explanation: map['explanation'],
+      marks: map['marks'] ?? 1,
+      imagePath: map['image_path'], // ✅ READ FROM DB
     );
   }
 
@@ -92,6 +95,8 @@ class QuestionModel {
       'options': options is List ? jsonEncode(options) : options,
       'correct_answer': correctAnswer,
       'explanation': explanation,
+      'marks': marks,
+      'image_path': imagePath, // ✅ SAVE TO DB
     };
   }
 }
