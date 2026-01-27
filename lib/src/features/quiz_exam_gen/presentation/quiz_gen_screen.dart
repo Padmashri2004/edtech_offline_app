@@ -5,6 +5,8 @@ import 'package:edtech_offline_app/services/pdf_service.dart';
 import 'package:edtech_offline_app/src/features/ai_assistant/data/ai_repository.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/quiz_repository.dart';
+// 1. ADDED: Import for Undo/Redo
+import 'utils/undo_redo_manager.dart';
 
 class QuizConfigBatch {
   String type;
@@ -45,6 +47,9 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
 
   List<QuestionModel> _generatedQuestions = [];
 
+  // 2. ADDED: Undo/Redo Manager
+  final UndoRedoManager _undoRedoManager = UndoRedoManager(maxStackSize: 50);
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -67,6 +72,31 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
         args['startPage'] as int,
         args['endPage'] as int,
       );
+    }
+  }
+
+  // 3. ADDED: Undo and Redo methods
+  void _undo() {
+    final previousState = _undoRedoManager.undo(_generatedQuestions);
+    if (previousState != null) {
+      setState(() {
+        _generatedQuestions = previousState;
+      });
+      _showSnack('↶ Undo');
+    } else {
+      _showSnack('Nothing to undo');
+    }
+  }
+
+  void _redo() {
+    final nextState = _undoRedoManager.redo(_generatedQuestions);
+    if (nextState != null) {
+      setState(() {
+        _generatedQuestions = nextState;
+      });
+      _showSnack('↷ Redo');
+    } else {
+      _showSnack('Nothing to redo');
     }
   }
 
@@ -97,6 +127,10 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
       return;
     }
 
+    // 4. MODIFIED: Save state before generating
+    if (_generatedQuestions.isNotEmpty) {
+      _undoRedoManager.saveState(_generatedQuestions);
+    }
     setState(() => _isGenerating = true);
 
     final aiRepo = context.read<AIRepository>();
@@ -116,8 +150,6 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
         );
 
         final qs = raw.map((q) {
-          // Assuming QuestionModel.fromMap exists or mapping logic is correct
-          // Adjust property access based on your actual raw map keys
           return QuestionModel(
             questionText: q['q'] ?? q['question'] ?? "",
             options: List<String>.from(q['o'] ?? q['options'] ?? []),
@@ -183,9 +215,22 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
     int current = _generatedQuestions.fold(0, (sum, q) => sum + q.marks);
 
     return Scaffold(
+      // 5. MODIFIED: AppBar with Undo/Redo buttons
       appBar: AppBar(
         title: Text(_chapterTitle),
         actions: [
+          // NEW: Undo button
+          IconButton(
+            icon: const Icon(Icons.undo),
+            onPressed: _undoRedoManager.canUndo ? _undo : null,
+            tooltip: 'Undo (${_undoRedoManager.undoCount})',
+          ),
+          // NEW: Redo button
+          IconButton(
+            icon: const Icon(Icons.redo),
+            onPressed: _undoRedoManager.canRedo ? _redo : null,
+            tooltip: 'Redo (${_undoRedoManager.redoCount})',
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(
@@ -316,8 +361,13 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
                                         color: Colors.red,
                                         child: const Icon(Icons.delete,
                                             color: Colors.white)),
-                                    onDismissed: (_) => setState(() =>
-                                        _generatedQuestions.removeAt(index)),
+                                    // 6. MODIFIED: Save state before dismiss
+                                    onDismissed: (_) {
+                                      _undoRedoManager
+                                          .saveState(_generatedQuestions);
+                                      setState(() =>
+                                          _generatedQuestions.removeAt(index));
+                                    },
                                     child: Card(
                                       margin: const EdgeInsets.symmetric(
                                           horizontal: 10, vertical: 4),
@@ -504,8 +554,12 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(c), child: const Text("Cancel")),
+          // 7. MODIFIED: Save state before confirming edit
           ElevatedButton(
             onPressed: () {
+              // Save state before editing
+              _undoRedoManager.saveState(_generatedQuestions);
+
               onSave(QuestionModel(
                 id: q.id,
                 examId: q.examId,
@@ -522,5 +576,14 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
         ],
       ),
     );
+  }
+
+  // 8. MODIFIED: Clear manager on dispose
+  @override
+  void dispose() {
+    _undoRedoManager.clear();
+    _timerController.dispose();
+    _maxMarksController.dispose();
+    super.dispose();
   }
 }

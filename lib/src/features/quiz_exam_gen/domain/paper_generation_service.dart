@@ -81,7 +81,7 @@ class PaperGenerationService {
     return q;
   }
 
-  // ADVANCED PAPER STRUCTURE (100 marks) - ASSERTION/REASON REMOVED
+  // ADVANCED PAPER STRUCTURE (100 marks) - FIXED: 2nd T/F replaced with Rearrange
   Future<List<QuestionModel>> _generateAdvancedPaper(String text,
       List<String>? topics, List<String>? imgs, String chapter) async {
     List<QuestionModel> q = [];
@@ -90,8 +90,8 @@ class PaperGenerationService {
     q.addAll(await _gen(text, 'Advanced', 'Fill-up', 5, 1, topics, chapter));
     q.addAll(await _gen(text, 'Advanced', 'True/False', 5, 1, topics, chapter));
 
-    // REPLACED Assertion/Reason with True/False (Gemma 270M limitation)
-    q.addAll(await _gen(text, 'Advanced', 'True/False', 5, 1, topics, chapter));
+    // FIXED: Replaced 2nd True/False with Rearrange as per requirements
+    q.addAll(await _gen(text, 'Advanced', 'Rearrange', 5, 1, topics, chapter));
 
     q.addAll(await _gen(text, 'Advanced', 'ShortAns', 7, 5, topics, chapter));
     q.addAll(await _gen(text, 'Advanced', 'PictureBased', 1, 5, topics, chapter,
