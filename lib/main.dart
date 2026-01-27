@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
-import 'src/core/database/database_helper.dart'; 
+//import 'package:flutter_gemma/flutter_gemma.dart';
+import 'src/core/database/database_helper.dart';
 import 'src/core/ai/ai_service.dart'; // Import is now used below
+import 'src/features/reports_sharing/parent_dashboard.dart';
+import 'src/features/reports_sharing/teacher_dashboard.dart';
+import 'src/features/reports_sharing/student_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 1. Initialize On-Device Al Pipeline [cite: 104, 115]
-  await FlutterGemma.initialize();
+  //await FlutterGemma.initialize();
 
   // 2. Initialize Core Database [cite: 110, 112]
-  await DatabaseHelper.instance.database;
+  // await DatabaseHelper.instance.database;
 
   // 3. Alumni & Agentic Transition Logic [cite: 96, 128]
   final ai = AIService();
@@ -19,7 +22,7 @@ void main() async {
   runApp(const EdTechApp());
 }
 
-/// Handles graduation logic for Grades 1-8 in June 
+/// Handles graduation logic for Grades 1-8 in June
 Future<void> checkAlumniTransitions(AIService ai) async {
   final now = DateTime.now();
   if (now.month == 6) {
@@ -53,7 +56,8 @@ class RoleSelectionScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text("Select Your Role to Login", style: TextStyle(fontSize: 20)),
+            const Text("Select Your Role to Login",
+                style: TextStyle(fontSize: 20)),
             const SizedBox(height: 30),
             _roleBtn(context, "Teacher", Icons.school),
             _roleBtn(context, "Student", Icons.person),
@@ -71,7 +75,22 @@ class RoleSelectionScreen extends StatelessWidget {
         icon: Icon(icon),
         label: Text("Continue as $role"),
         onPressed: () {
-          // Navigates to role-filtered login [cite: 1]
+          if (role == "Parent") {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ParentDashboard()),
+            );
+          } else if (role == "Teacher") {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TeacherDashboard()),
+            );
+          } else if (role == "Student") {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const StudentDashboard()),
+            );
+          }
         },
       ),
     );
