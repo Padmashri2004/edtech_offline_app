@@ -16,8 +16,9 @@ dependencies:
   # File Management & PDF Processing (Mod 1 & 6)
   path_provider: ^2.1.5
   pdf_render: ^1.4.12
-  crypto: ^3.0.7
   pdf: ^3.10.6
+  printing: ^5.11.0
+  crypto: ^3.0.7
 
 
 dev_dependencies:
@@ -29,5 +30,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/textbooks/models/gemma.task
+  #  - assets/textbooks/models/gemma.task
     - assets/textbooks/
