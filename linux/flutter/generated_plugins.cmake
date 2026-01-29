@@ -4,7 +4,6 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   flutter_gemma
-  objectbox_flutter_libs
   printing
 )
 
