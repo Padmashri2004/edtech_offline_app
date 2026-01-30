@@ -1,5 +1,5 @@
 name: edtech_offline_app
-description: "Offline EdTech portal with Gemma 3 AI"
+description: "Offline EdTech portal with Gemma 3 AI - RootEd"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -33,7 +33,7 @@ dependencies:
   # PDF Packages
   pdf: ^3.10.0
   printing: ^5.11.0
-  pdf_text: ^0.5.0
+  syncfusion_flutter_pdf: ^27.1.58  # CHANGED: Replaces pdf_text
 
 dev_dependencies:
   flutter_test:

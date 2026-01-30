@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:pdf_text/pdf_text.dart';
-import 'package:pdf_render/pdf_render.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart'
+    as sf_pdf; // FIXED: Added prefix
+import 'package:pdf_render/pdf_render.dart'
+    as pdf_render; // FIXED: Added prefix
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:logger/logger.dart';
@@ -27,24 +29,35 @@ class PdfService {
     return null;
   }
 
+  // FIXED: Using sf_pdf prefix for Syncfusion PDF
   Future<List<Map<String, dynamic>>> getChapters(File file) async {
     List<Map<String, dynamic>> chapters = [];
     try {
       if (!await file.exists()) return [];
 
-      PDFDoc doc = await PDFDoc.fromFile(file);
-      int total = doc.length;
+      // Load PDF with Syncfusion (using prefix)
+      final sf_pdf.PdfDocument document = sf_pdf.PdfDocument(
+        inputBytes: await file.readAsBytes(),
+      );
+
+      int total = document.pages.count;
       int scan = total < 15 ? total : 15;
 
+      // Extract text from TOC pages
+      sf_pdf.PdfTextExtractor extractor = sf_pdf.PdfTextExtractor(document);
+
       for (int i = 0; i < scan; i++) {
-        String text = await doc.pageAt(i).text;
+        String text = extractor.extractText(startPageIndex: i, endPageIndex: i);
+
         if (text.toLowerCase().contains('content') ||
             text.toLowerCase().contains('index')) {
           chapters.addAll(_parseTocLines(text.split('\n'), total));
         }
       }
 
+      // If no chapters found, return full textbook
       if (chapters.isEmpty) {
+        document.dispose();
         return [
           {
             'chapterNumber': "1",
@@ -56,6 +69,7 @@ class PdfService {
         ];
       }
 
+      // Set end pages
       for (int k = 0; k < chapters.length; k++) {
         if (k < chapters.length - 1) {
           chapters[k]['endPage'] = chapters[k + 1]['startPage'] - 1;
@@ -64,6 +78,7 @@ class PdfService {
         }
       }
 
+      document.dispose();
       return chapters;
     } catch (e) {
       _logger.e("Chapter scan error: $e");
@@ -71,20 +86,34 @@ class PdfService {
     }
   }
 
+  // FIXED: Using sf_pdf prefix for Syncfusion PDF
   Future<String> extractChapterText(File file, int start, int end) async {
     try {
       if (!await file.exists()) return "";
 
-      PDFDoc doc = await PDFDoc.fromFile(file);
+      // Load PDF with Syncfusion (using prefix)
+      final sf_pdf.PdfDocument document = sf_pdf.PdfDocument(
+        inputBytes: await file.readAsBytes(),
+      );
+
       StringBuffer buffer = StringBuffer();
 
       int s = start < 1 ? 1 : start;
-      int e = end > doc.length ? doc.length : end;
+      int e = end > document.pages.count ? document.pages.count : end;
 
-      for (int i = s; i <= e; i++) {
-        buffer.writeln(await doc.pageAt(i - 1).text);
+      // Extract text using Syncfusion's text extractor
+      sf_pdf.PdfTextExtractor extractor = sf_pdf.PdfTextExtractor(document);
+
+      for (int i = s - 1; i < e; i++) {
+        // Pages are 0-indexed
+        String pageText = extractor.extractText(
+          startPageIndex: i,
+          endPageIndex: i,
+        );
+        buffer.writeln(pageText);
       }
 
+      document.dispose();
       return buffer.toString();
     } catch (e) {
       _logger.e("Text extraction error: $e");
@@ -92,13 +121,15 @@ class PdfService {
     }
   }
 
-  // FIXED: Image extraction with 864x864 cropping for Gemma Vision
+  // FIXED: Using pdf_render prefix for image rendering
   Future<List<String>> extractChapterImages(
       File file, int start, int end) async {
     List<String> paths = [];
     try {
       final tempDir = await getTemporaryDirectory();
-      final pdf = await PdfDocument.openFile(file.path);
+      // Use pdf_render for image extraction (using prefix)
+      final pdf_render.PdfDocument pdf =
+          await pdf_render.PdfDocument.openFile(file.path);
 
       int s = start < 1 ? 1 : start;
       int e = end > pdf.pageCount ? pdf.pageCount : end;
@@ -106,10 +137,11 @@ class PdfService {
 
       for (int i = s; i <= e; i += step) {
         try {
-          PdfPage page = await pdf.getPage(i);
+          pdf_render.PdfPage page = await pdf.getPage(i);
 
-          // FIXED: Render at higher resolution first
-          PdfPageImage pageImg = await page.render(width: 1200, height: 1600);
+          // Render at higher resolution first
+          pdf_render.PdfPageImage pageImg =
+              await page.render(width: 1200, height: 1600);
 
           img.Image raw = img.Image.fromBytes(
             width: pageImg.width,
@@ -118,7 +150,7 @@ class PdfService {
             order: img.ChannelOrder.rgba,
           );
 
-          // FIXED: Crop to 864x864 square (Gemma Vision requirement)
+          // Crop to 864x864 square (Gemma Vision requirement)
           img.Image square = img.copyCropCircle(raw, radius: 432);
           img.Image resized = img.copyResize(square, width: 864, height: 864);
 
