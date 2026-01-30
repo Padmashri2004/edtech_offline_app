@@ -1,27 +1,41 @@
 import 'package:flutter/material.dart';
 
-class ParentConnectTeacherScreen extends StatefulWidget {
-  const ParentConnectTeacherScreen({super.key});
+class ParentConnectTeacherScreen extends StatelessWidget {
+  final Map<String, String> student;
 
-  @override
-  State<ParentConnectTeacherScreen> createState() =>
-      _ParentConnectTeacherScreenState();
-}
-
-class _ParentConnectTeacherScreenState
-    extends State<ParentConnectTeacherScreen> {
-  String selectedClass = 'Class 6';
-  String selectedSubject = 'Science';
-  String selectedTeacher = 'Mrs. Mary';
-
-  String meetingType = 'Virtual';
-
-  final List<String> classes = ['Class 6', 'Class 7', 'Class 8'];
-  final List<String> subjects = ['Science', 'Maths', 'English'];
-  final List<String> teachers = ['Mrs. Mary', 'Mr. John', 'Ms. Anita'];
+  const ParentConnectTeacherScreen({
+    super.key,
+    required this.student,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final String className = "${student["class"]} - ${student["section"]}";
+    final String studentName = student["name"]!;
+
+    // 🔁 DIFFERENT teachers per student (for verification)
+    final List<Map<String, String>> teachers = studentName == "Aarav"
+        ? [
+            {
+              "name": "Mrs. Mary",
+              "subject": "Science",
+            },
+            {
+              "name": "Mr. Rajesh",
+              "subject": "Mathematics",
+            },
+          ]
+        : [
+            {
+              "name": "Ms. Kavitha",
+              "subject": "English",
+            },
+            {
+              "name": "Mr. Suresh",
+              "subject": "Social Science",
+            },
+          ];
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
@@ -34,30 +48,18 @@ class _ParentConnectTeacherScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _dropdown("Select Class", classes, selectedClass,
-                (val) => setState(() => selectedClass = val)),
-            _dropdown("Select Subject", subjects, selectedSubject,
-                (val) => setState(() => selectedSubject = val)),
-            _dropdown("Select Teacher", teachers, selectedTeacher,
-                (val) => setState(() => selectedTeacher = val)),
-            const SizedBox(height: 20),
-            _meetingTypeSelector(),
-            const Spacer(),
-            Center(
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.send),
-                label: const Text("Send Request"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () {
-                  _showConfirmation(context);
+            _studentHeader(studentName, className),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: teachers.length,
+                itemBuilder: (context, index) {
+                  final teacher = teachers[index];
+                  return _teacherCard(
+                    context,
+                    teacher["name"]!,
+                    teacher["subject"]!,
+                  );
                 },
               ),
             ),
@@ -67,105 +69,91 @@ class _ParentConnectTeacherScreenState
     );
   }
 
-  Widget _dropdown(String label, List<String> items, String value,
-      Function(String) onChanged) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  // ---------------- UI (UNCHANGED STYLE) ----------------
+
+  Widget _studentHeader(String name, String className) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Colors.indigo, Colors.blueAccent],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
         children: [
-          Text(label,
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [
-                BoxShadow(
-                    color: Colors.black12, blurRadius: 4, offset: Offset(0, 3)),
-              ],
-            ),
-            child: DropdownButton<String>(
-              value: value,
-              isExpanded: true,
-              underline: const SizedBox(),
-              items: items
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                  .toList(),
-              onChanged: (val) => onChanged(val!),
-            ),
+          const Icon(Icons.school, color: Colors.white, size: 32),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                className,
+                style: const TextStyle(color: Colors.white70),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _meetingTypeSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text("Meeting Type",
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            _radioTile("Virtual"),
-            const SizedBox(width: 10),
-            _radioTile("Physical"),
-          ],
+  Widget _teacherCard(
+    BuildContext context,
+    String teacherName,
+    String subject,
+  ) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListTile(
+        leading: const CircleAvatar(
+          backgroundColor: Colors.indigo,
+          child: Icon(Icons.person, color: Colors.white),
         ),
-      ],
-    );
-  }
-
-  Widget _radioTile(String type) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => meetingType = type),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: meetingType == type
-                ? Colors.indigo.withOpacity(0.15)
-                : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: meetingType == type ? Colors.indigo : Colors.grey.shade300,
-            ),
+        title: Text(teacherName),
+        subtitle: Text(subject),
+        trailing: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.indigo,
+            foregroundColor: Colors.white,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                meetingType == type
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-                color: Colors.indigo,
-              ),
-              const SizedBox(width: 6),
-              Text(type),
-            ],
-          ),
+          onPressed: () {
+            _showConnectDialog(context, teacherName);
+          },
+          child: const Text("Connect"),
         ),
       ),
     );
   }
 
-  void _showConfirmation(BuildContext context) {
+  void _showConnectDialog(BuildContext context, String teacherName) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Request Sent"),
-        content: Text(
-            "Your request to connect with $selectedTeacher has been sent."),
+        title: const Text("Connect with Teacher"),
+        content: const Text(
+          "Would you like to connect virtually or physical meet?",
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("OK"),
-          )
+            child: const Text("Virtual"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Physical"),
+          ),
         ],
       ),
     );

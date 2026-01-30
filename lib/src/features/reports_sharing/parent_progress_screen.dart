@@ -9,18 +9,16 @@ class ParentProgressScreen extends StatelessWidget {
     required this.student,
   });
 
-  final String parentName = "Mrs. Anitha";
-  final String studentName = "Aarav";
-  final String studentClass = "Class 6 - A";
-
-  final int quizAverage = 78;
-  final int assignmentsSubmitted = 8;
-  final int assignmentsTotal = 10;
-
   @override
   Widget build(BuildContext context) {
-    final studentName = student["name"]!;
-    final studentClass = "${student["class"]} - ${student["section"]}";
+    // 🔁 student-specific mock data (only for verification)
+    final String studentName = student["name"]!;
+    final String studentClass = "${student["class"]} - ${student["section"]}";
+
+    final int quizAverage =
+        studentName == "Aarav" ? 78 : 80; // DIFFERENT ON PURPOSE
+    final int assignmentsSubmitted = studentName == "Aarav" ? 8 : 9;
+    final int assignmentsTotal = 10;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -34,7 +32,7 @@ class ParentProgressScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _studentInfoCard(),
+            _studentInfoCard(studentName, studentClass),
             const SizedBox(height: 20),
             _sectionTitle("Quiz Performance"),
             _progressCard(
@@ -51,7 +49,7 @@ class ParentProgressScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             _sectionTitle("Overall Progress"),
-            _overallProgressBar(),
+            _overallProgressBar(quizAverage),
             const SizedBox(height: 30),
             Center(
               child: ElevatedButton.icon(
@@ -85,7 +83,9 @@ class ParentProgressScreen extends StatelessWidget {
     );
   }
 
-  Widget _studentInfoCard() {
+  // ---------------- UI HELPERS (UNCHANGED) ----------------
+
+  Widget _studentInfoCard(String name, String className) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -106,7 +106,7 @@ class ParentProgressScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                studentName,
+                name,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -115,7 +115,7 @@ class ParentProgressScreen extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                studentClass,
+                className,
                 style: const TextStyle(color: Colors.white70),
               ),
             ],
@@ -173,8 +173,8 @@ class ParentProgressScreen extends StatelessWidget {
     );
   }
 
-  Widget _overallProgressBar() {
-    double progress = quizAverage / 100;
+  Widget _overallProgressBar(int quizAverage) {
+    final double progress = quizAverage / 100;
 
     return Container(
       padding: const EdgeInsets.all(16),

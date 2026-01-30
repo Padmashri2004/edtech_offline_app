@@ -19,17 +19,23 @@ class _ParentDashboardState extends State<ParentDashboard> {
       "name": "Aarav",
       "class": "Class 6",
       "section": "A",
-      "id": "STU101",
+      "id": "STU001",
     },
     {
       "name": "Ananya",
-      "class": "Class 4",
+      "class": "Class 8",
       "section": "B",
-      "id": "STU102",
+      "id": "STU002",
     },
   ];
 
-  int selectedStudentIndex = 0;
+  late Map<String, String> selectedStudent;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedStudent = students.first;
+  }
 
   void _navigate(Widget screen) {
     Navigator.push(
@@ -40,8 +46,6 @@ class _ParentDashboardState extends State<ParentDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedStudent = students[selectedStudentIndex];
-
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
@@ -55,7 +59,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildProfileCard(selectedStudent),
+            _buildProfileCard(),
             const SizedBox(height: 20),
             Expanded(
               child: GridView.count(
@@ -70,9 +74,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
                     subtitle: "Marks & reports",
                     color: Colors.blue,
                     onTap: () => _navigate(
-                      ParentProgressScreen(
-                        student: students[selectedStudentIndex],
-                      ),
+                      ParentProgressScreen(student: selectedStudent),
                     ),
                   ),
                   _buildDashboardCard(
@@ -80,21 +82,27 @@ class _ParentDashboardState extends State<ParentDashboard> {
                     title: "Connect Teacher",
                     subtitle: "Meet or message",
                     color: Colors.green,
-                    onTap: () => _navigate(ParentConnectTeacherScreen()),
+                    onTap: () => _navigate(
+                      ParentConnectTeacherScreen(student: selectedStudent),
+                    ),
                   ),
                   _buildDashboardCard(
                     icon: Icons.question_answer,
                     title: "Queries",
                     subtitle: "Ask doubts",
                     color: Colors.orange,
-                    onTap: () => _navigate(ParentQueriesScreen()),
+                    onTap: () => _navigate(
+                      ParentQueriesScreen(student: selectedStudent),
+                    ),
                   ),
                   _buildDashboardCard(
                     icon: Icons.notifications,
                     title: "Notifications",
                     subtitle: "Updates & alerts",
                     color: Colors.purple,
-                    onTap: () => _navigate(ParentNotificationsScreen()),
+                    onTap: () => _navigate(
+                      ParentNotificationsScreen(student: selectedStudent),
+                    ),
                   ),
                 ],
               ),
@@ -105,7 +113,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
     );
   }
 
-  Widget _buildProfileCard(Map<String, String> selectedStudent) {
+  Widget _buildProfileCard() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -114,75 +122,49 @@ class _ParentDashboardState extends State<ParentDashboard> {
         ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              const CircleAvatar(
-                radius: 30,
-                backgroundColor: Colors.white,
-                child: Icon(Icons.person, size: 36, color: Colors.indigo),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    parentName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "Parent ID linked",
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                ],
-              ),
-            ],
+          const CircleAvatar(
+            radius: 30,
+            backgroundColor: Colors.white,
+            child: Icon(Icons.person, size: 36, color: Colors.indigo),
           ),
-          const SizedBox(height: 16),
-          const Text(
-            "Children",
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  parentName,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                DropdownButton<Map<String, String>>(
+                  value: selectedStudent,
+                  dropdownColor: Colors.white,
+                  isExpanded: true,
+                  underline: Container(),
+                  onChanged: (value) {
+                    setState(() {
+                      selectedStudent = value!;
+                    });
+                  },
+                  items: students.map((student) {
+                    return DropdownMenuItem(
+                      value: student,
+                      child: Text(
+                        "${student["name"]} – ${student["class"]}${student["section"]}",
+                        style: const TextStyle(color: Colors.black),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: List.generate(students.length, (index) {
-              final student = students[index];
-              final isSelected = index == selectedStudentIndex;
-
-              return ChoiceChip(
-                label: Text(
-                  "${student["name"]} • ${student["class"]}${student["section"]}",
-                ),
-                selected: isSelected,
-                selectedColor: Colors.white,
-                labelStyle: TextStyle(
-                  color: isSelected ? Colors.indigo : Colors.white,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                ),
-                backgroundColor: Colors.indigo.withOpacity(0.4),
-                onSelected: (_) {
-                  setState(() {
-                    selectedStudentIndex = index;
-                  });
-                },
-              );
-            }),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            "Selected ID: ${selectedStudent["id"]}",
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ],
       ),
