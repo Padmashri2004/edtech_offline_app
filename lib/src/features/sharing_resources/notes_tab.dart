@@ -5,64 +5,60 @@ class NotesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _noteCard(
-          teacher: "Mrs. Mary",
-          classInfo: "Class 6 - Science",
-          chapter: "Chapter 5: Plants Ecosystem",
-          topic: "Photosynthesis",
-          type: "PDF + Video",
-          time: "2 hrs ago",
-        ),
-        _noteCard(
-          teacher: "Mr. John",
-          classInfo: "Class 7 - Maths",
-          chapter: "Chapter 3: Algebra",
-          topic: "Linear Equations",
-          type: "Handwritten Notes",
-          time: "Yesterday",
-        ),
-      ],
-    );
-  }
+    final notes = [
+      {
+        "title": "Photosynthesis Notes",
+        "class": "Class 6",
+        "subject": "Science",
+        "chapter": "Chapter 5",
+        "topic": "Photosynthesis",
+        "type": "PDF",
+        "teacher": "Mrs. Mary",
+        "time": "10 mins ago",
+      },
+      {
+        "title": "Ecosystem Video",
+        "class": "Class 6",
+        "subject": "Science",
+        "chapter": "Chapter 4",
+        "topic": "Ecosystem",
+        "type": "Video Link",
+        "teacher": "Mrs. Mary",
+        "time": "1 hr ago",
+      },
+    ];
 
-  Widget _noteCard({
-    required String teacher,
-    required String classInfo,
-    required String chapter,
-    required String topic,
-    required String type,
-    required String time,
-  }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(teacher,
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 4),
-            Text(classInfo, style: const TextStyle(color: Colors.grey)),
-            const Divider(),
-            Text(chapter),
-            Text("Topic: $topic"),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: notes.length,
+      itemBuilder: (context, index) {
+        final n = notes[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            leading: Icon(
+              n["type"] == "PDF" ? Icons.picture_as_pdf : Icons.video_library,
+              color: Colors.indigo,
+            ),
+            title: Text(n["title"]!),
+            subtitle: Text(
+              "${n["class"]}, ${n["subject"]}\n${n["chapter"]} • ${n["topic"]}",
+            ),
+            trailing: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Chip(label: Text(type)),
-                Text(time, style: const TextStyle(color: Colors.grey)),
+                Text(n["teacher"]!, style: const TextStyle(fontSize: 12)),
+                Text(n["time"]!, style: const TextStyle(fontSize: 11)),
               ],
-            )
-          ],
-        ),
-      ),
+            ),
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Downloading resource...")),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

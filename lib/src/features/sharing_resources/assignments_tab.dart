@@ -5,65 +5,45 @@ class AssignmentsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _assignmentCard(
-          teacher: "Mrs. Mary",
-          subject: "Science",
-          chapter: "Plants Ecosystem",
-          deadline: "Due: 02 Feb 2026",
-          description: "Write and explain photosynthesis with diagram.",
-        ),
-        _assignmentCard(
-          teacher: "Mr. John",
-          subject: "Maths",
-          chapter: "Algebra",
-          deadline: "Due: 04 Feb 2026",
-          description: "Solve Exercise 3.1 completely.",
-        ),
-      ],
-    );
-  }
+    final assignments = [
+      {
+        "title": "Photosynthesis Worksheet",
+        "class": "Class 6",
+        "subject": "Science",
+        "chapter": "Chapter 5",
+        "deadline": "Due: 02 Feb 2026",
+        "teacher": "Mrs. Mary",
+      },
+      {
+        "title": "Ecosystem Short Notes",
+        "class": "Class 6",
+        "subject": "Science",
+        "chapter": "Chapter 4",
+        "deadline": "Due: 04 Feb 2026",
+        "teacher": "Mrs. Mary",
+      },
+    ];
 
-  Widget _assignmentCard({
-    required String teacher,
-    required String subject,
-    required String chapter,
-    required String deadline,
-    required String description,
-  }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("$teacher • $subject",
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 6),
-            Text("Chapter: $chapter"),
-            const SizedBox(height: 6),
-            Text(description),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(deadline,
-                    style: const TextStyle(
-                        color: Colors.red, fontWeight: FontWeight.bold)),
-                ElevatedButton(
-                  onPressed: () {},
-                  child: const Text("View"),
-                )
-              ],
-            )
-          ],
-        ),
-      ),
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: assignments.length,
+      itemBuilder: (context, index) {
+        final a = assignments[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            leading: const Icon(Icons.assignment, color: Colors.green),
+            title: Text(a["title"]!),
+            subtitle: Text(
+              "${a["class"]}, ${a["subject"]}\n${a["chapter"]}\n${a["deadline"]}",
+            ),
+            trailing: Text(
+              a["teacher"]!,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+        );
+      },
     );
   }
 }
