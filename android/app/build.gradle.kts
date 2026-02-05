@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.edtech_offline_app"
-    compileSdk = 34
+    compileSdk = 36
     
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -19,8 +19,8 @@ android {
     
     defaultConfig {
         applicationId = "com.example.edtech_offline_app"
-        minSdk = 24
-        targetSdk = 34
+        minSdk = flutter.minSdkVersion  // FIXED: Changed from flutter.minSdkVersion
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
@@ -28,6 +28,9 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
+            // Add these two lines to stop the error:
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }

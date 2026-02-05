@@ -37,22 +37,22 @@ class _TeacherQuizDashboardState extends State<TeacherQuizDashboard> {
     await repo.deleteExam(id);
     _loadExams(); // Refresh list
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Quiz Deleted")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Quiz Deleted")));
     }
   }
 
   Future<void> _exportExam(ExamModel exam) async {
-    final pdfService = context.read<PdfExportService>();
+    final messenger = ScaffoldMessenger.of(context);
+    final exportService = PdfExportService();
+
     try {
-      final file = await pdfService.generateExamPdf(exam);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("PDF Exported: ${file.path}")));
-      }
+      final filePath = await exportService.generateExamPdf(exam);
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text("Saved: $filePath")));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Export Failed: $e")));
-      }
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text("Export failed: $e")));
     }
   }
 
@@ -72,14 +72,18 @@ class _TeacherQuizDashboardState extends State<TeacherQuizDashboard> {
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(
-                        title: Text(exam.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text("Questions: ${exam.questions.length} • Difficulty: ${exam.difficulty}"),
+                        title: Text(exam.title,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text(
+                            "Questions: ${exam.questions.length} • Difficulty: ${exam.difficulty}"),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             // Export Button
                             IconButton(
-                              icon: const Icon(Icons.picture_as_pdf, color: Colors.indigo),
+                              icon: const Icon(Icons.picture_as_pdf,
+                                  color: Colors.indigo),
                               tooltip: "Export PDF",
                               onPressed: () => _exportExam(exam),
                             ),

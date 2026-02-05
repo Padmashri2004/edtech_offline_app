@@ -142,9 +142,9 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
     final exportService = context.read<PdfExportService>();
 
     try {
-      final file = await exportService.generateExamPdf(exam);
+      final filePath = await exportService.generateExamPdf(exam);
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text("Saved: ${file.path}")));
+      messenger.showSnackBar(SnackBar(content: Text("Saved: $filePath")));
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text("Failed: $e")));

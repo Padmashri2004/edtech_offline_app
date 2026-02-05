@@ -25,11 +25,33 @@ class PaperGenerationService {
     ExamModel? basicExam;
     ExamModel? advancedExam;
 
-    // BASIC PAPER (100 marks)
+    // --- BASIC TIER (100 Marks) ---
     if (basicStudents.isNotEmpty) {
-      _logger.i("🏗️ Generating BASIC Paper...");
-      List<QuestionModel> q =
-          await _generateBasicPaper(rawContent, focusTopics, chapterTitle);
+      _logger.i("🏗️ Generating BASIC Paper (100M)...");
+      List<QuestionModel> q = [];
+
+      q.addAll(await _gen(
+          rawContent, 'Basic', 'MCQ', 5, 1, focusTopics, chapterTitle,
+          header: "Section 1: MCQ (5x1=5)"));
+      q.addAll(await _gen(
+          rawContent, 'Basic', 'Fill-up', 5, 1, focusTopics, chapterTitle,
+          hints: true,
+          header: "Section 2: Fill-in-the-Blanks (Hinted) (5x1=5)"));
+      q.addAll(await _gen(
+          rawContent, 'Basic', 'OddOneOut', 5, 1, focusTopics, chapterTitle,
+          header: "Section 3: Odd One Out (5x1=5)"));
+      q.addAll(await _gen(
+          rawContent, 'Basic', 'Rearrange', 5, 1, focusTopics, chapterTitle,
+          header: "Section 4: Rearrange (5x1=5)"));
+      q.addAll(await _gen(
+          rawContent, 'Basic', 'MatchIt', 5, 1, focusTopics, chapterTitle,
+          header: "Section 5: Match the Following (5x1=5)"));
+      q.addAll(await _gen(
+          rawContent, 'Basic', 'ShortAns', 7, 5, focusTopics, chapterTitle,
+          header: "Section 6: Short Answer - Choose 5 (5x5=25)"));
+      q.addAll(await _gen(
+          rawContent, 'Basic', 'LongAns', 7, 10, focusTopics, chapterTitle,
+          header: "Section 7: Long Answer - Choose 5 (5x10=50)"));
 
       basicExam = ExamModel(
         title: "$chapterTitle (Basic)",
@@ -37,17 +59,38 @@ class PaperGenerationService {
         timestamp: DateTime.now().toIso8601String(),
         assignedStudents: basicStudents,
         questions: q,
+        // Removed totalMarks parameter as it is not in your model
       );
-
       await _quizRepository.saveExam(basicExam);
-      _logger.i("✅ Basic: ${basicExam.totalMarks}M");
     }
 
-    // ADVANCED PAPER (100 marks)
+    // --- ADVANCED TIER (100 Marks) ---
     if (advancedStudents.isNotEmpty) {
-      _logger.i("🏗️ Generating ADVANCED Paper...");
-      List<QuestionModel> q = await _generateAdvancedPaper(
-          rawContent, focusTopics, extractedImages, chapterTitle);
+      _logger.i("🏗️ Generating ADVANCED Paper (100M)...");
+      List<QuestionModel> q = [];
+
+      q.addAll(await _gen(
+          rawContent, 'Advanced', 'MCQ', 5, 1, focusTopics, chapterTitle,
+          header: "Section 1: MCQ (5x1=5)"));
+      q.addAll(await _gen(
+          rawContent, 'Advanced', 'Fill-up', 5, 1, focusTopics, chapterTitle,
+          hints: false,
+          header: "Section 2: Fill-in-the-Blanks (No Hint) (5x1=5)"));
+      q.addAll(await _gen(
+          rawContent, 'Advanced', 'True/False', 5, 1, focusTopics, chapterTitle,
+          header: "Section 3: True/False (5x1=5)"));
+      q.addAll(await _gen(
+          rawContent, 'Advanced', 'Rearrange', 5, 1, focusTopics, chapterTitle,
+          header: "Section 4: Rearrange (5x1=5)"));
+      q.addAll(await _gen(
+          rawContent, 'Advanced', 'ShortAns', 7, 5, focusTopics, chapterTitle,
+          header: "Section 5: Short Answer - Choose 5 (5x5=25)"));
+      q.addAll(await _gen(rawContent, 'Advanced', 'PictureBased', 1, 5,
+          focusTopics, chapterTitle,
+          imgs: extractedImages, header: "Section 6: Case Study (1x5=5)"));
+      q.addAll(await _gen(
+          rawContent, 'Advanced', 'LongAns', 7, 10, focusTopics, chapterTitle,
+          header: "Section 7: Long Answer - Choose 5 (5x10=50)"));
 
       advancedExam = ExamModel(
         title: "$chapterTitle (Advanced)",
@@ -55,55 +98,17 @@ class PaperGenerationService {
         timestamp: DateTime.now().toIso8601String(),
         assignedStudents: advancedStudents,
         questions: q,
+        // Removed totalMarks parameter
       );
-
       await _quizRepository.saveExam(advancedExam);
-      _logger.i("✅ Advanced: ${advancedExam.totalMarks}M");
     }
 
     return {'basic': basicExam, 'advanced': advancedExam};
   }
 
-  // BASIC PAPER STRUCTURE (100 marks)
-  Future<List<QuestionModel>> _generateBasicPaper(
-      String text, List<String>? topics, String chapter) async {
-    List<QuestionModel> q = [];
-
-    q.addAll(await _gen(text, 'Basic', 'MCQ', 5, 1, topics, chapter));
-    q.addAll(await _gen(text, 'Basic', 'Fill-up', 5, 1, topics, chapter,
-        hints: true));
-    q.addAll(await _gen(text, 'Basic', 'OddOneOut', 5, 1, topics, chapter));
-    q.addAll(await _gen(text, 'Basic', 'Rearrange', 5, 1, topics, chapter));
-    q.addAll(await _gen(text, 'Basic', 'MatchIt', 5, 1, topics, chapter));
-    q.addAll(await _gen(text, 'Basic', 'ShortAns', 7, 5, topics, chapter));
-    q.addAll(await _gen(text, 'Basic', 'LongAns', 7, 10, topics, chapter));
-
-    return q;
-  }
-
-  // ADVANCED PAPER STRUCTURE (100 marks) - FIXED: 2nd T/F replaced with Rearrange
-  Future<List<QuestionModel>> _generateAdvancedPaper(String text,
-      List<String>? topics, List<String>? imgs, String chapter) async {
-    List<QuestionModel> q = [];
-
-    q.addAll(await _gen(text, 'Advanced', 'MCQ', 5, 1, topics, chapter));
-    q.addAll(await _gen(text, 'Advanced', 'Fill-up', 5, 1, topics, chapter));
-    q.addAll(await _gen(text, 'Advanced', 'True/False', 5, 1, topics, chapter));
-
-    // FIXED: Replaced 2nd True/False with Rearrange as per requirements
-    q.addAll(await _gen(text, 'Advanced', 'Rearrange', 5, 1, topics, chapter));
-
-    q.addAll(await _gen(text, 'Advanced', 'ShortAns', 7, 5, topics, chapter));
-    q.addAll(await _gen(text, 'Advanced', 'PictureBased', 1, 5, topics, chapter,
-        imgs: imgs));
-    q.addAll(await _gen(text, 'Advanced', 'LongAns', 7, 10, topics, chapter));
-
-    return q;
-  }
-
   Future<List<QuestionModel>> _gen(String text, String diff, String type,
       int count, int marks, List<String>? topics, String chapter,
-      {bool hints = false, List<String>? imgs}) async {
+      {bool hints = false, List<String>? imgs, required String header}) async {
     try {
       final raw = await _aiRepository.getQuizFromChapter(
         rawContent: text,
@@ -115,20 +120,21 @@ class PaperGenerationService {
         chapterTitle: chapter,
       );
 
-      if (raw.isEmpty) return [];
+      if (raw.isEmpty) {
+        return [];
+      }
 
-      return raw.asMap().entries.map((e) {
+      List<QuestionModel> questions = raw.asMap().entries.map((e) {
         int idx = e.key;
         var d = e.value;
-
         String qText = d['q'] ?? d['question'] ?? "";
-        String? img;
 
-        if (type == 'PictureBased') {
-          String topic = d['topic'] ?? d['answer'] ?? "concept";
-          qText = "Case Study: Explain the diagram of **$topic**.";
-          if (imgs != null && imgs.isNotEmpty) {
-            img = imgs[idx % imgs.length];
+        // Handle Picture logic
+        String? img;
+        if (type == 'PictureBased' && imgs != null && imgs.isNotEmpty) {
+          img = imgs[idx % imgs.length];
+          if (qText.length < 5) {
+            qText = "Analyze the diagram and explain its key components.";
           }
         }
 
@@ -141,6 +147,24 @@ class PaperGenerationService {
           imagePath: img,
         );
       }).toList();
+
+      if (questions.isNotEmpty) {
+        String original = questions[0].questionText;
+        String injected = "///SECTION: $header///$original";
+
+        questions[0] = QuestionModel(
+          id: questions[0].id,
+          examId: questions[0].examId,
+          questionText: injected,
+          options: questions[0].options,
+          correctAnswer: questions[0].correctAnswer,
+          explanation: questions[0].explanation,
+          marks: questions[0].marks,
+          imagePath: questions[0].imagePath,
+        );
+      }
+
+      return questions;
     } catch (e) {
       _logger.e("❌ Section $type error: $e");
       return [];
