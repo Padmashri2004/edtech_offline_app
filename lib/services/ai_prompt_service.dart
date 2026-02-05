@@ -71,7 +71,7 @@ class AiPromptService {
         break;
 
       case 'CaseStudy':
-      case 'PictureBased': // Handling PictureBased as Case Study text for now
+      case 'PictureBased':
         instructions =
             "Write a short Case Study paragraph based on the text. Then ask a question analyzing it. Mention '[Insert Diagram]' if needed.";
         jsonExample =
@@ -96,14 +96,14 @@ class AiPromptService {
     }
 
     String prompt = """
-    Task: $instructions
-    Difficulty: $difficulty
-    $focusContext
-    Context: "$safeText"
-    
-    OUTPUT JSON ONLY. No Markdown. Format:
-    $jsonExample
-    """;
+Task: $instructions
+Difficulty: $difficulty
+$focusContext
+Context: "$safeText"
+
+OUTPUT JSON ONLY. No Markdown. Format:
+$jsonExample
+""";
 
     _logger.d("🔹 Prompt: $sectionType");
     return prompt;

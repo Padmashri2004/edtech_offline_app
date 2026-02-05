@@ -1,5 +1,3 @@
-// C:\Users\Admin\edtech_offline_app\lib\src\features\quiz_exam_gen\data\models\exam_model.dart
-
 import 'dart:convert';
 
 class ExamModel {
@@ -21,6 +19,7 @@ class ExamModel {
     required this.questions,
   });
 
+  // Calculate total marks by summing question marks
   int get totalMarks => questions.fold(0, (sum, q) => sum + q.marks);
 
   Map<String, dynamic> toMap() {
@@ -39,8 +38,11 @@ class ExamModel {
     if (map['assigned_students'] != null) {
       try {
         students = List<String>.from(jsonDecode(map['assigned_students']));
-      } catch (e) {/* ignore */}
+      } catch (e) {
+        // ignore malformed JSON
+      }
     }
+
     return ExamModel(
       id: map['id'],
       title: map['title'],
@@ -48,7 +50,7 @@ class ExamModel {
       timestamp: map['timestamp'],
       timerMinutes: map['timer_minutes'] ?? 30,
       assignedStudents: students,
-      questions: [],
+      questions: [], // questions loaded separately
     );
   }
 }
@@ -57,11 +59,11 @@ class QuestionModel {
   final int? id;
   final int? examId;
   final String questionText;
-  final dynamic options;
+  final dynamic options; // can be List<String> or JSON string
   final String correctAnswer;
   final String? explanation;
   final int marks;
-  final String? imagePath; // ✅ ADDED THIS FIELD
+  final String? imagePath; // ✅ supports image attachment
 
   QuestionModel({
     this.id,
@@ -71,19 +73,21 @@ class QuestionModel {
     required this.correctAnswer,
     this.explanation,
     this.marks = 1,
-    this.imagePath, // ✅ ADDED TO CONSTRUCTOR
+    this.imagePath,
   });
 
   factory QuestionModel.fromMap(Map<String, dynamic> map) {
     return QuestionModel(
+      id: map['id'],
+      examId: map['exam_id'],
       questionText:
           map['question'] ?? map['question_text'] ?? 'No Question Text',
       options: map['options'],
       correctAnswer:
           map['answer_index']?.toString() ?? map['correct_answer'] ?? '',
       explanation: map['explanation'],
-      marks: map['marks'] ?? 1,
-      imagePath: map['image_path'], // ✅ READ FROM DB
+      marks: map['marks'] ?? 1, // ✅ default to 1 if missing
+      imagePath: map['image_path'], // ✅ read from DB
     );
   }
 
@@ -92,11 +96,11 @@ class QuestionModel {
       'id': id,
       'exam_id': examId,
       'question_text': questionText,
-      'options': options is List ? jsonEncode(options) : options,
+      'options': options,
       'correct_answer': correctAnswer,
       'explanation': explanation,
       'marks': marks,
-      'image_path': imagePath, // ✅ SAVE TO DB
+      'image_path': imagePath,
     };
   }
 }

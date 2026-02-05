@@ -63,7 +63,7 @@ class _TeacherQuizDashboardState extends State<TeacherQuizDashboard> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _exams.isEmpty
-              ? const Center(child: Text("No quizzes created yet."))
+              ? const Center(child: Text("Welcome to Teacher's portal"))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: _exams.length,
