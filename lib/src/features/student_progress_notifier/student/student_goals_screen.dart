@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'student_deadline_check_screen.dart';
+import 'package:edtech_offline_app/src/features/student_tracking/goal_setter.dart';
+
+
+
 
 class StudentGoalsScreen extends StatefulWidget {
   final String topic;
@@ -7,10 +11,13 @@ class StudentGoalsScreen extends StatefulWidget {
 
   @override
   State<StudentGoalsScreen> createState() => _StudentGoalsScreenState();
+  
 }
 
 class _StudentGoalsScreenState extends State<StudentGoalsScreen> {
   DateTime? targetDate;
+  final GoalSetterService _goalService = GoalSetterService();
+
 
   @override
   Widget build(BuildContext context) {
@@ -43,15 +50,22 @@ class _StudentGoalsScreenState extends State<StudentGoalsScreen> {
             const Spacer(),
             ElevatedButton(
               onPressed: targetDate == null
-                  ? null
-                  : () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const StudentDeadlineCheckScreen(),
-                        ),
-                      );
-                    },
+    ? null
+    : () async {
+        await _goalService.createGoal(
+          studentId: 'student_001',
+          goalTitle: widget.topic,
+          targetDate: targetDate!.toIso8601String(),
+        );
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const StudentDeadlineCheckScreen(),
+          ),
+        );
+      },
+
               child: const Text("Save Goal"),
             ),
           ],
