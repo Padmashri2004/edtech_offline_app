@@ -29,6 +29,7 @@ class PdfService {
   Future<List<Map<String, dynamic>>> getChapters(File file) async {
     List<Map<String, dynamic>> chapters = [];
     sf_pdf.PdfDocument? document;
+
     try {
       if (!await file.exists()) return [];
       document = sf_pdf.PdfDocument(inputBytes: await file.readAsBytes());
@@ -36,6 +37,7 @@ class PdfService {
       int scan = total < 15 ? total : 15;
       sf_pdf.PdfTextExtractor extractor = sf_pdf.PdfTextExtractor(document);
 
+      // First scan: look for TOC in first 10–15 pages
       for (int i = 0; i < scan; i++) {
         String text = extractor.extractText(startPageIndex: i, endPageIndex: i);
         if (text.toLowerCase().contains('content') ||
@@ -45,23 +47,33 @@ class PdfService {
         }
       }
 
+      // Fallback: full scan if TOC not found
       if (chapters.isEmpty) {
-        return [
-          {
-            'chapterNumber': "1",
-            'title': "Full Textbook",
-            'startPage': 1,
-            'endPage': total,
-            'topics': <String>[]
+        for (int i = 0; i < total; i++) {
+          String text =
+              extractor.extractText(startPageIndex: i, endPageIndex: i);
+          for (var line in text.split('\n')) {
+            if (line.toLowerCase().startsWith("chapter")) {
+              chapters.add({
+                'chapterNumber': line.split(' ')[1],
+                'title':
+                    line.replaceFirst(RegExp(r'Chapter\s+\d+:'), '').trim(),
+                'startPage': i + 1,
+                'endPage': total,
+                'topics': <String>[]
+              });
+            }
           }
-        ];
+        }
       }
 
+      // Fix endPage assignment
       for (int k = 0; k < chapters.length; k++) {
         chapters[k]['endPage'] = (k < chapters.length - 1)
             ? chapters[k + 1]['startPage'] - 1
             : total;
       }
+
       return chapters;
     } catch (e) {
       _logger.e("Chapter scan error: $e");
@@ -106,6 +118,7 @@ class PdfService {
       List<int> pagesToRender = [];
       int count = end - s + 1;
       int step = (count / 5).ceil().clamp(1, count).toInt();
+
       for (int i = s - 1; i < end; i += step) {
         pagesToRender.add(i);
       }
@@ -116,12 +129,14 @@ class PdfService {
           final pngBytes = await page.toPng();
           img.Image? raw = img.decodePng(pngBytes);
           if (raw == null) continue;
+
           int size = raw.width < raw.height ? raw.width : raw.height;
           img.Image square = img.copyCrop(raw,
               x: (raw.width - size) ~/ 2,
               y: (raw.height - size) ~/ 2,
               width: size,
               height: size);
+
           img.Image resized = img.copyResize(square, width: 864, height: 864);
           List<int> processedPng = img.encodePng(resized);
           String name = "img_${_uuid.v4()}.png";
@@ -143,16 +158,17 @@ class PdfService {
       final text = await extractChapterText(f, s, e);
       final lines = text.split('\n');
       final subtopics = <String>[];
+
       for (var line in lines) {
         final trimmed = line.trim();
         if (trimmed.isEmpty) continue;
-        if (trimmed.length < 60 &&
-            (RegExp(r'^\d+\.').hasMatch(trimmed) ||
-                trimmed.endsWith(':') ||
-                trimmed.split(' ').length <= 6)) {
+
+        // ✅ Stronger heading detection
+        if (RegExp(r'^(Chapter\s+\d+|[A-Z][A-Za-z\s]+:)$').hasMatch(trimmed)) {
           subtopics.add(trimmed);
         }
       }
+
       return subtopics.isEmpty
           ? ["Introduction", "Main Concept", "Examples", "Summary"]
           : subtopics;
@@ -166,7 +182,6 @@ class PdfService {
     List<Map<String, dynamic>> found = [];
     final re =
         RegExp(r"^Chapter\s+(\d+):\s+(.+)\s+(\d+)$", caseSensitive: false);
-
     for (String line in lines) {
       String t = line.trim();
       if (t.isEmpty || t.length > 100) continue;

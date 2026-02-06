@@ -4,9 +4,8 @@ import 'package:logger/logger.dart';
 class AIService {
   final Logger _logger = Logger();
 
-  // FIXED: Optimized for Gemma 3-270M
-  static const int defaultMaxTokens = 256; // Reduced from 1024
-  static const int explanationMaxTokens = 128; // Reduced from 512
+  static const int defaultMaxTokens = 256;
+  static const int explanationMaxTokens = 128;
 
   Future<String> generateAssessment({
     required String prompt,
@@ -15,7 +14,6 @@ class AIService {
     try {
       final model = await FlutterGemma.getActiveModel(maxTokens: maxTokens);
       final chat = await model.createChat();
-
       await chat.addQueryChunk(Message.text(text: prompt, isUser: true));
 
       StringBuffer response = StringBuffer();
@@ -25,7 +23,6 @@ class AIService {
 
       String result = response.toString();
       _logger.d("✅ Generated ${result.length} chars");
-
       return result;
     } catch (e) {
       _logger.e("❌ AI Generation Error: $e");
@@ -33,6 +30,7 @@ class AIService {
     }
   }
 
+  /// ✅ Added back: Explain mistake logic for quiz_play_screen.dart
   Future<String> explainMistake({
     required String question,
     required String studentAns,
@@ -43,12 +41,10 @@ class AIService {
           await FlutterGemma.getActiveModel(maxTokens: explanationMaxTokens);
       final chat = await model.createChat();
 
-      // FIXED: Shorter prompt for 270M model
       String xaiPrompt = """
 Q: "$question"
 Student: "$studentAns"
 Correct: "$correctAns"
-
 Explain why wrong, correct concept, tip to remember. Max 80 words.
 """;
 
@@ -66,33 +62,7 @@ Explain why wrong, correct concept, tip to remember. Max 80 words.
     }
   }
 
-  Future<String> evaluateProgress(String perfData) async {
-    try {
-      final model =
-          await FlutterGemma.getActiveModel(maxTokens: explanationMaxTokens);
-      final chat = await model.createChat();
-
-      // FIXED: Simplified prompt
-      String agentPrompt = """
-Student data: $perfData
-Should extend deadline? YES/NO and why? (2 sentences max)
-""";
-
-      await chat.addQueryChunk(Message.text(text: agentPrompt, isUser: true));
-
-      StringBuffer suggestion = StringBuffer();
-      await for (final chunk in chat.generateChatResponseAsync()) {
-        suggestion.write(chunk);
-      }
-
-      return suggestion.toString();
-    } catch (e) {
-      _logger.e("❌ Agentic AI Error: $e");
-      return "NO - Unable to analyze at this time.";
-    }
-  }
-
   bool isResponseValid(String response) {
-    return response.isNotEmpty && response != "[]" && response.length > 10;
+    return response.isNotEmpty && response != "[]" && response.length > 5;
   }
 }

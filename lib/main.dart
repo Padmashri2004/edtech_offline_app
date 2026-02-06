@@ -71,7 +71,7 @@ class EdTechApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const RoleSelectionScreen(),
-        '/teacher-dashboard': (context) => const TeacherQuizDashboard(),
+        '/teacher-dashboard': (context) => const TeacherDashboard(),
         '/chapter-list': (context) => const ChapterListScreen(),
         '/quiz-gen': (context) => const QuizGenScreen(),
         '/paper-gen': (context) => const PaperGenScreen(),

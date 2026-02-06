@@ -19,7 +19,7 @@ class ExamModel {
     required this.questions,
   });
 
-  // Calculate total marks by summing question marks
+  // ✅ Calculate total marks dynamically
   int get totalMarks => questions.fold(0, (sum, q) => sum + q.marks);
 
   Map<String, dynamic> toMap() {
@@ -42,7 +42,6 @@ class ExamModel {
         // ignore malformed JSON
       }
     }
-
     return ExamModel(
       id: map['id'],
       title: map['title'],
@@ -63,7 +62,7 @@ class QuestionModel {
   final String correctAnswer;
   final String? explanation;
   final int marks;
-  final String? imagePath; // ✅ supports image attachment
+  final String? imagePath;
 
   QuestionModel({
     this.id,
@@ -86,8 +85,8 @@ class QuestionModel {
       correctAnswer:
           map['answer_index']?.toString() ?? map['correct_answer'] ?? '',
       explanation: map['explanation'],
-      marks: map['marks'] ?? 1, // ✅ default to 1 if missing
-      imagePath: map['image_path'], // ✅ read from DB
+      marks: map['marks'] ?? 1,
+      imagePath: map['image_path'],
     );
   }
 

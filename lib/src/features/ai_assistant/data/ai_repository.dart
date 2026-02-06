@@ -9,6 +9,8 @@ import 'package:edtech_offline_app/src/core/database/database_helper.dart';
 import 'package:edtech_offline_app/services/ai_prompt_service.dart';
 import 'package:edtech_offline_app/services/pdf_service.dart';
 import 'dart:io';
+import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
+import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/quiz_repository.dart';
 
 class AIRepository {
   final AIService _aiService;
@@ -17,6 +19,7 @@ class AIRepository {
 
   AIRepository(this._aiService);
 
+  // --- Quiz Generation ---
   Future<List<Map<String, dynamic>>> getQuizFromChapter({
     required String rawContent,
     required String difficulty,
@@ -31,6 +34,7 @@ class AIRepository {
       if (chunks.isEmpty) return [];
 
       final context = _selectBestChunk(chunks, focusTopics);
+
       final prompt = _promptService.buildSectionPrompt(
         text: context,
         difficulty: difficulty,
@@ -49,6 +53,7 @@ class AIRepository {
 
       String cleanJson = _sanitizeJson(response);
       List<Map<String, dynamic>> questions;
+
       try {
         questions = List<Map<String, dynamic>>.from(jsonDecode(cleanJson));
       } catch (e) {
@@ -60,16 +65,18 @@ class AIRepository {
 
       // Attach images if relevant
       if (chapterTitle != null) {
-        final file = File("assets/Class_6_Science_Sample.pdf"); // adjust path
-        final images = await PdfService().extractChapterImages(file, 1, 6);
-        for (int i = 0; i < questions.length; i++) {
-          if (questions[i]['q']
-              .toString()
-              .toLowerCase()
-              .contains("photosynthesis")) {
-            questions[i]['image_path'] =
-                images.isNotEmpty ? images.first : null;
-            questions[i]['caption'] = "Photosynthesis diagram";
+        final file = File("assets/${chapterTitle.replaceAll(' ', '_')}.pdf");
+        if (await file.exists()) {
+          final images = await PdfService().extractChapterImages(file, 1, 6);
+          for (int i = 0; i < questions.length; i++) {
+            if (questions[i]['q']
+                .toString()
+                .toLowerCase()
+                .contains("photosynthesis")) {
+              questions[i]['image_path'] =
+                  images.isNotEmpty ? images.first : null;
+              questions[i]['caption'] = "Photosynthesis diagram";
+            }
           }
         }
       }
@@ -91,6 +98,8 @@ class AIRepository {
     required String rawContent,
     required String tier, // "Basic" or "Advanced"
     String? chapterTitle,
+    String? subject,
+    String? className,
   }) async {
     final chunks = TextbookParser.cleanAndChunk(rawContent);
     if (chunks.isEmpty) return [];
@@ -158,6 +167,24 @@ class AIRepository {
           rawContent: context, difficulty: "Hard", type: "LongAns", count: 7));
     }
 
+    // ✅ Save exam to DB so dashboard shows it
+    final exam = ExamModel(
+      title: "${className ?? 'Class'} ${subject ?? 'Subject'} - $tier Tier",
+      difficulty: tier,
+      timestamp: DateTime.now().toIso8601String(),
+      questions: paper
+          .map((q) => QuestionModel(
+                questionText: q['q'],
+                options: q['o'],
+                correctAnswer: q['a'],
+                marks: 1,
+                imagePath: q['image_path'],
+              ))
+          .toList(),
+    );
+
+    await QuizRepository().saveExam(exam);
+
     _logger.i("📄 Generated ${paper.length} questions for $tier tier exam");
     return paper;
   }
@@ -212,22 +239,23 @@ class AIRepository {
 
   String _sanitizeJson(String raw) {
     try {
-      String clean = raw.trim();
-      if (clean.contains('')) {
-        clean = clean
-            .replaceAll(RegExp(r'^[a-z]*\n?', multiLine: true), '')
-            .replaceAll('```', '');
-      }
+      String clean = raw
+          .trim()
+          .replaceAll('json', '')
+          .replaceAll('', '')
+          .replaceAll('\n', ' ');
+
       int start = clean.indexOf('[');
       int end = clean.lastIndexOf(']');
       if (start != -1 && end != -1 && end > start) {
         return clean.substring(start, end + 1);
       }
-      // Attempt to recover single object if array not found
+
       if (clean.startsWith('{') && clean.endsWith('}')) {
         return "[$clean]";
       }
-      return "[]";
+
+      return clean; // fallback
     } catch (e) {
       _logger.e("❌ JSON sanitization failed: $e");
       return "[]";
@@ -238,8 +266,10 @@ class AIRepository {
     if (focusTopics == null || focusTopics.isEmpty) {
       return chunks[Random().nextInt(chunks.length)];
     }
+
     int bestScore = 0;
     String bestChunk = chunks.first;
+
     for (var chunk in chunks) {
       int score = 0;
       String lowerChunk = chunk.toLowerCase();
@@ -253,6 +283,7 @@ class AIRepository {
         bestChunk = chunk;
       }
     }
+
     return bestChunk;
   }
 }
