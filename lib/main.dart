@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
+import 'package:provider/provider.dart';
+import 'package:edtech_offline_app/src/features/student_tracking/progress_notifier.dart';
 
 //import 'package:provider/provider.dart';
 //import 'package:flutter_gemma/flutter_gemma.dart';
@@ -42,7 +44,12 @@ void main() async {
 
   await DatabaseHelper.instance.database;
 
-  runApp(const EdTechApp());
+  runApp(
+  ChangeNotifierProvider(
+    create: (_) => ProgressNotifier(),
+    child: const EdTechApp(),
+  ),
+);
 }
 
     

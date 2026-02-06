@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'student_goals_screen.dart';
 
+import 'package:edtech_offline_app/src/features/student_tracking/progress_notifier.dart';
+import 'package:provider/provider.dart';
+
 class StudentTopicSelectionScreen extends StatefulWidget {
   const StudentTopicSelectionScreen({super.key});
 
@@ -32,16 +35,25 @@ class _StudentTopicSelectionScreenState
       ),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.arrow_forward),
-        onPressed: () {
-          final selectedTopics =
-              topics.entries.where((e) => e.value).map((e) => e.key).toList();
+        onPressed: () async {
+           final selectedTopics =
+      topics.entries.where((e) => e.value).map((e) => e.key).toList();
 
-          if (selectedTopics.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Select at least one topic")),
-            );
-            return;
-          }
+  if (selectedTopics.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Select at least one topic")),
+    );
+    return;
+  }
+          final progressNotifier = context.read<ProgressNotifier>();
+
+await progressNotifier.updateProgress(
+  studentId: 'student_001',
+  subject: 'Biology',
+  chapter: selectedTopics.first,
+  progressPercent: 0,
+);
+
 
           Navigator.push(
             context,
