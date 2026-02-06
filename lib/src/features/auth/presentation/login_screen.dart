@@ -16,10 +16,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _login() {
     if (_formKey.currentState!.validate()) {
-      // Auth handled elsewhere
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login successful')),
-      );
+      if (role == 'Parent') {
+        Navigator.pushReplacementNamed(context, '/parent-dashboard');
+      } else if (role == 'Student') {
+        Navigator.pushReplacementNamed(context, '/student-dashboard');
+      } else if (role == 'Teacher') {
+        Navigator.pushReplacementNamed(context, '/teacher-dashboard');
+      }
     }
   }
 
