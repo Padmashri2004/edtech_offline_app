@@ -49,5 +49,53 @@ class DatabaseHelper {
         FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE
       )
     ''');
+
+    // MODULE 2 - Student Tracking
+    // 3. Student Progress Table
+    await db.execute('''
+      CREATE TABLE student_progress (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_id TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        chapter TEXT NOT NULL,
+        progress_percent INTEGER DEFAULT 0,
+        last_updated TEXT
+      )
+    ''');
+
+    // 4. Study Goals Table
+    await db.execute('''
+      CREATE TABLE study_goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_id TEXT NOT NULL,
+        goal_title TEXT NOT NULL,
+        target_date TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        created_at TEXT
+      )
+    ''');
+
+    //MODULE 7 - Alumni & Mentorship
+    // 5. Alumni Profiles Table
+    await db.execute('''
+      CREATE TABLE alumni_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        alumni_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        expertise TEXT NOT NULL,
+        is_available INTEGER DEFAULT 1
+      )
+    ''');
+
+    // 6. Mentorship Requests Table
+    await db.execute('''
+      CREATE TABLE mentorship_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_id TEXT NOT NULL,
+        alumni_id TEXT NOT NULL,
+        status TEXT DEFAULT 'requested',
+        requested_at TEXT
+      )
+    ''');
   }
 }
