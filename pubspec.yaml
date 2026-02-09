@@ -1,5 +1,5 @@
 name: edtech_offline_app
-description: "Offline EdTech portal with Gemma 3 AI - RootEd"
+description: "Offline EdTech App with AI-Powered Quiz & Question Paper Generation"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -14,25 +14,28 @@ dependencies:
   flutter_gemma: ^0.12.0
   sqflite: ^2.4.2
   path: ^1.9.1
-
+  
+  # State Management
+  provider: ^6.1.1
+  
   # File Management
   path_provider: ^2.1.5
   file_picker: ^10.3.10
   logger: ^2.5.0
-  provider: ^6.1.1
-  hive: ^2.2.3
-  hive_flutter: ^1.1.0
   shared_preferences: ^2.2.2
   uuid: ^4.2.2
-
-  # Image & Crypto
-  image: ^4.1.7
-  crypto: ^3.0.3
-
+  
   # PDF Packages
   pdf: ^3.10.0
   printing: ^5.11.0
-  syncfusion_flutter_pdf: ^27.1.58  # CHANGED: Use stable version for compatibility
+  syncfusion_flutter_pdf: ^27.1.58
+  
+  # Image & Crypto
+  image: ^4.1.7
+  crypto: ^3.0.3
+  
+  # UI & Utils
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:

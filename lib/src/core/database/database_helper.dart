@@ -10,138 +10,77 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB(
-        'edtech_offline_v4.db'); // Incremented version for Auth update
+    _database = await _initDB('edtech_offline_v7.db');
     return _database!;
   }
 
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
-    debugPrint(" 📂  DB Path: $path");
+
+    debugPrint(" 📂 DB Path: $path");
 
     return await openDatabase(
       path,
-      version: 4, // Increment version
+      version: 8, // bump version since schema changed
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
   }
 
   Future _createDB(Database db, int version) async {
-    // --- 1. USER & AUTH TABLES (New for Mod 2/Login) ---
+    // Exams table (used for both quizzes and exams)
     await db.execute('''
-      CREATE TABLE users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        role TEXT CHECK(role IN ('teacher', 'student', 'parent')) NOT NULL,
-        full_name TEXT NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE students (
-        user_id INTEGER PRIMARY KEY,
-        class_grade TEXT NOT NULL,
-        section TEXT NOT NULL,
-        roll_number INTEGER,
-        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE teachers (
-        user_id INTEGER PRIMARY KEY,
-        subjects TEXT, -- JSON array: ["Math", "Science"]
-        is_class_teacher INTEGER DEFAULT 0,
-        class_teacher_for TEXT,
-        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-      )
-    ''');
-
-    // --- 2. EXISTING EXAM TABLES (Preserved) ---
-    const examTable = '''
       CREATE TABLE exams (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         difficulty TEXT NOT NULL,
         timestamp TEXT NOT NULL,
-        timer_minutes INTEGER DEFAULT 30
+        timer_minutes INTEGER NOT NULL,     -- ✅ teacher must provide timer
+        total_marks INTEGER NOT NULL,       -- ✅ teacher must provide marks
+        type TEXT NOT NULL                  -- "quiz" or "exam"
       )
-    ''';
+    ''');
 
-    const questionTable = '''
+    // Questions table
+    await db.execute('''
       CREATE TABLE questions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         exam_id INTEGER NOT NULL,
+        type TEXT NOT NULL,                 -- MCQ, True/False, etc.
         question_text TEXT NOT NULL,
         options TEXT,
         correct_answer TEXT NOT NULL,
         explanation TEXT,
-        marks INTEGER DEFAULT 1,
+        marks INTEGER NOT NULL,
         image_path TEXT,
         FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE
       )
-    ''';
+    ''');
 
-    // NEW: Question History for Deduplication (Mod 1/6)
-    const historyTable = '''
+    // Question history (to avoid regenerating duplicates)
+    await db.execute('''
       CREATE TABLE question_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         chapter_title TEXT,
         topic TEXT,
-        question_hash TEXT,
+        question_hash TEXT UNIQUE,
         generated_at TEXT
       )
-    ''';
-
-    await db.execute(examTable);
-    await db.execute(questionTable);
-    await db.execute(historyTable);
-
-    debugPrint(" ✅  Database v4 Created with Auth & Schema updates");
+    ''');
   }
 
   Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
-    debugPrint(" ⚠️  Upgrading DB from $oldVersion to $newVersion");
-
-    if (oldVersion < 4) {
-      // Create missing tables if upgrading
-      try {
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            role TEXT CHECK(role IN ('teacher', 'student', 'parent')) NOT NULL,
-            full_name TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS students (
-            user_id INTEGER PRIMARY KEY,
-            class_grade TEXT NOT NULL,
-            section TEXT NOT NULL,
-            roll_number INTEGER,
-            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS teachers (
-            user_id INTEGER PRIMARY KEY,
-            subjects TEXT,
-            is_class_teacher INTEGER DEFAULT 0,
-            class_teacher_for TEXT,
-            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-          )
-        ''');
-        debugPrint(" ✅  Migrated to v4 (Auth Tables Added)");
-      } catch (e) {
-        debugPrint("Error migrating auth tables: $e");
-      }
+    if (oldVersion < 8) {
+      // Ensure required columns exist
+      await db.execute(
+          'ALTER TABLE exams ADD COLUMN type TEXT NOT NULL DEFAULT "quiz"');
+      await db.execute(
+          'ALTER TABLE exams ADD COLUMN timer_minutes INTEGER NOT NULL DEFAULT 30');
+      await db.execute(
+          'ALTER TABLE exams ADD COLUMN total_marks INTEGER NOT NULL DEFAULT 0');
+      await db.execute(
+          'ALTER TABLE questions ADD COLUMN type TEXT NOT NULL DEFAULT "MCQ"');
     }
   }
 }

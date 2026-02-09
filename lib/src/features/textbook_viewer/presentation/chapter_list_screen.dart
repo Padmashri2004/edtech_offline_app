@@ -14,85 +14,112 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
   File? _selectedFile;
   List<Map<String, dynamic>> _chapters = [];
   bool _isLoading = false;
-  bool _isAnalyzingSubtopics = false;
-
-  // Track selected chapter index
   final Set<int> _checkedChaptersIndices = {};
-  final Set<int> _analyzedChaptersIndices = {};
-  final Map<String, List<String>> _selectedTopics = {};
+  bool _selectAll = false;
+
+  // ✅ Progress tracking
+  double extractionProgress = 0.0;
+  bool _isExtracting = false;
+  String? _currentChapterTitle; // show which chapter is being processed
 
   Future<void> _handlePickFile() async {
     setState(() => _isLoading = true);
-    final file = await _pdfService.pickTextbook(); //
+    final file = await _pdfService.pickTextbook();
     if (file != null) {
-      final scannedChapters = await _pdfService.getChapters(file); //
+      final scannedChapters = await _pdfService.getChapters(file);
       setState(() {
         _selectedFile = file;
         _chapters = scannedChapters;
         _isLoading = false;
-        _selectedTopics.clear();
         _checkedChaptersIndices.clear();
-        _analyzedChaptersIndices.clear();
+        extractionProgress = 0.0;
+        _selectAll = false;
+        _currentChapterTitle = null;
       });
     } else {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _analyzeSelectedChapters() async {
+  Future<void> _extractSelectedChapters() async {
     if (_checkedChaptersIndices.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Please select at least one chapter to analyze.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select at least one chapter.")),
+      );
       return;
     }
-    setState(() => _isAnalyzingSubtopics = true);
 
-    // Scan subtopics for selected chapters
+    setState(() {
+      _isExtracting = true;
+      extractionProgress = 0.0;
+      _currentChapterTitle = null;
+    });
+
+    int total = _checkedChaptersIndices.length;
+    int processed = 0;
+
+    // ✅ Use index to show which chapter is being processed
     for (int index in _checkedChaptersIndices) {
-      if (_analyzedChaptersIndices.contains(index)) continue;
-      var chapter = _chapters[index];
-      List<String> subtopics = await _pdfService.scanChapterSubtopics(
-          _selectedFile!, chapter['startPage'], chapter['endPage']); //
+      final chapter = _chapters[index];
+      _currentChapterTitle = chapter['title'];
+      await Future.delayed(const Duration(milliseconds: 400)); // simulate work
+      processed++;
       setState(() {
-        _chapters[index]['topics'] = subtopics;
-        _analyzedChaptersIndices.add(index);
+        extractionProgress = processed / total;
       });
     }
-    setState(() => _isAnalyzingSubtopics = false);
+
+    setState(() {
+      _isExtracting = false;
+      _currentChapterTitle = null;
+    });
   }
 
-  void _toggleTopic(String chapterTitle, String topic) {
+  void _toggleSelectAll(bool? value) {
     setState(() {
-      if (!_selectedTopics.containsKey(chapterTitle)) {
-        _selectedTopics[chapterTitle] = [];
-      }
-      if (_selectedTopics[chapterTitle]!.contains(topic)) {
-        _selectedTopics[chapterTitle]!.remove(topic);
-      } else {
-        _selectedTopics[chapterTitle]!.add(topic);
+      _selectAll = value ?? false;
+      _checkedChaptersIndices.clear();
+      if (_selectAll) {
+        for (int i = 0; i < _chapters.length; i++) {
+          _checkedChaptersIndices.add(i);
+        }
       }
     });
   }
 
-  // --- CRITICAL FIX: Dual Navigation Logic ---
-  void _navigateToModule(String routeName) {
+  // FIXED: Extract chapter text and pass to navigation
+  Future<void> _navigateToModule(String routeName) async {
     if (_checkedChaptersIndices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Select a chapter first.")));
+        const SnackBar(content: Text("Select a chapter first.")),
+      );
       return;
     }
 
-    // Get the first selected chapter for processing
-    int firstIndex = _checkedChaptersIndices.first;
-    var chapter = _chapters[firstIndex];
+    if (_selectedFile == null) return;
+
+    // Extract text from first selected chapter
+    final firstIndex = _checkedChaptersIndices.first;
+    final chapter = _chapters[firstIndex];
+
+    setState(() => _isLoading = true);
+
+    // Extract chapter content
+    final rawContent = await _pdfService.extractChapterText(
+      _selectedFile!,
+      chapter['startPage'],
+      chapter['endPage'],
+    );
+
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
 
     Navigator.pushNamed(context, routeName, arguments: {
       'file': _selectedFile,
-      'title': chapter['title'],
-      'startPage': chapter['startPage'],
-      'endPage': chapter['endPage'],
-      // Pass full selection if needed for advanced logic
-      'selection': _selectedTopics,
+      'chapter': chapter,
+      'rawContent': rawContent,
+      'selection': _checkedChaptersIndices.toList(),
     });
   }
 
@@ -102,7 +129,7 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
       appBar: AppBar(title: const Text("Select Content")),
       body: Column(
         children: [
-          // 1. Upload Button
+          // Upload Button
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: SizedBox(
@@ -115,36 +142,52 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
               ),
             ),
           ),
+
           if (_isLoading) const LinearProgressIndicator(),
 
-          // 2. Chapter List Header
+          // Header with Select All
           if (_chapters.isNotEmpty)
             Container(
               color: Colors.indigo.shade50,
               padding: const EdgeInsets.all(8),
               child: Row(
                 children: [
-                  Expanded(
-                    child: Text(
-                      "${_checkedChaptersIndices.length} Chapters Selected",
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                  Checkbox(
+                    value: _selectAll,
+                    onChanged: _toggleSelectAll,
                   ),
+                  const Text("Select All / Deselect All"),
+                  const Spacer(),
                   ElevatedButton(
-                      onPressed: _isAnalyzingSubtopics
-                          ? null
-                          : _analyzeSelectedChapters,
-                      child: _isAnalyzingSubtopics
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text("Scan for Topics"))
+                    onPressed: _isExtracting ? null : _extractSelectedChapters,
+                    child: _isExtracting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text("Extract Chapters"),
+                  ),
                 ],
               ),
             ),
 
-          // 3. Chapter List View
+          // Progress bar for extraction
+          if (_isExtracting || extractionProgress > 0)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                children: [
+                  LinearProgressIndicator(value: extractionProgress),
+                  if (_currentChapterTitle != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text("Processing: $_currentChapterTitle"),
+                    ),
+                ],
+              ),
+            ),
+
+          // Chapter List
           Expanded(
             child: _chapters.isEmpty
                 ? const Center(child: Text("Upload a textbook to begin."))
@@ -153,66 +196,32 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
                     itemBuilder: (context, index) {
                       final chapter = _chapters[index];
                       final title = chapter['title'];
-                      final isAnalyzed =
-                          _analyzedChaptersIndices.contains(index);
-                      List<String> topics = isAnalyzed
-                          ? List<String>.from(chapter['topics'] ?? [])
-                          : [];
-
                       return Card(
-                        child: Column(
-                          children: [
-                            CheckboxListTile(
-                              title: Text(title,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
-                              subtitle: Text(
-                                  "Pages ${chapter['startPage']} - ${chapter['endPage']}"),
-                              value: _checkedChaptersIndices.contains(index),
-                              secondary: CircleAvatar(
-                                backgroundColor:
-                                    isAnalyzed ? Colors.green : Colors.grey,
-                                child: Icon(
-                                    isAnalyzed ? Icons.check : Icons.search,
-                                    color: Colors.white),
-                              ),
-                              onChanged: (bool? val) {
-                                setState(() {
-                                  // Single selection logic for simplicity in MVP
-                                  _checkedChaptersIndices.clear();
-                                  if (val == true) {
-                                    _checkedChaptersIndices.add(index);
-                                  }
-                                });
-                              },
-                            ),
-                            if (isAnalyzed)
-                              ExpansionTile(
-                                title: const Text("Select Subtopics",
-                                    style: TextStyle(
-                                        fontSize: 12, color: Colors.grey)),
-                                initiallyExpanded: true,
-                                children: topics.map((topic) {
-                                  final isSelected =
-                                      _selectedTopics[title]?.contains(topic) ??
-                                          false;
-                                  return CheckboxListTile(
-                                    dense: true,
-                                    title: Text(topic),
-                                    value: isSelected,
-                                    onChanged: (val) =>
-                                        _toggleTopic(title, topic),
-                                  );
-                                }).toList(),
-                              ),
-                          ],
+                        child: CheckboxListTile(
+                          title: Text(title,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(
+                              "Pages ${chapter['startPage']} - ${chapter['endPage']}"),
+                          value: _checkedChaptersIndices.contains(index),
+                          onChanged: (bool? val) {
+                            setState(() {
+                              if (val == true) {
+                                _checkedChaptersIndices.add(index);
+                              } else {
+                                _checkedChaptersIndices.remove(index);
+                              }
+                              _selectAll = _checkedChaptersIndices.length ==
+                                  _chapters.length;
+                            });
+                          },
                         ),
                       );
                     },
                   ),
           ),
 
-          // 4. Action Buttons (FIXED)
+          // Action Buttons
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -224,8 +233,6 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
                         : null,
                     icon: const Icon(Icons.flash_on),
                     label: const Text("Mod 1: Quiz"),
-                    style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16)),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -236,10 +243,6 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
                         : null,
                     icon: const Icon(Icons.description),
                     label: const Text("Mod 6: Exam Paper"),
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigo,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16)),
                   ),
                 ),
               ],

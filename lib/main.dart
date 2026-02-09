@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
-
 import 'package:edtech_offline_app/src/core/database/database_helper.dart';
 import 'package:edtech_offline_app/src/core/ai/ai_service.dart';
 import 'package:edtech_offline_app/src/core/utils/asset_manager.dart';
@@ -10,6 +9,7 @@ import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/quiz_reposito
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/domain/paper_generation_service.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/domain/pdf_export_service.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
+import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/providers/exam_provider.dart';
 import 'package:edtech_offline_app/src/features/textbook_viewer/presentation/chapter_list_screen.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/quiz_gen_screen.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/paper_gen_screen.dart';
@@ -17,28 +17,36 @@ import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/quiz_
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/student_quiz_list_screen.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/teacher_quiz_dashboard.dart';
 
+// Flag to prevent re-initialization
+bool _isAiInitialized = false;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await _initAiEngine();
-  await DatabaseHelper.instance.database;
+  // Only initialize once
+  if (!_isAiInitialized) {
+    await _initAiEngine();
+    await DatabaseHelper.instance.database;
+    _isAiInitialized = true;
+  }
 
+  // Initialize services
   final aiService = AIService();
-  final aiRepository = AIRepository(aiService);
+  final aiRepository = AIRepository(); // ✅ Fixed: No parameter needed
   final quizRepository = QuizRepository();
 
   runApp(
     MultiProvider(
       providers: [
+        Provider<AIService>(create: (_) => aiService),
         Provider<AIRepository>(create: (_) => aiRepository),
         Provider<QuizRepository>(create: (_) => quizRepository),
         Provider<PaperGenerationService>(
           create: (_) => PaperGenerationService(
-            aiRepository: aiRepository,
-            quizRepository: quizRepository,
-          ),
+              aiRepository), // ✅ Fixed: Only one parameter
         ),
-        Provider<PdfExportService>(create: (_) => PdfExportService()),
+        Provider<PDFExportService>(create: (_) => PDFExportService()),
+        ChangeNotifierProvider<ExamProvider>(create: (_) => ExamProvider()),
       ],
       child: const EdTechApp(),
     ),
@@ -52,6 +60,7 @@ Future<void> _initAiEngine() async {
     debugPrint("✅ AI Engine Ready (Gemma 270M)");
   } catch (e) {
     debugPrint("❌ AI Init Error: $e");
+    // Don't crash - app can still work for non-AI features
   }
 }
 
@@ -84,6 +93,16 @@ class EdTechApp extends StatelessWidget {
           return const Scaffold(
               body: Center(child: Text("Error: No Exam Data")));
         },
+      },
+      onUnknownRoute: (settings) {
+        return MaterialPageRoute(
+          builder: (context) => Scaffold(
+            appBar: AppBar(title: const Text("Error")),
+            body: Center(
+              child: Text("Route not found: ${settings.name}"),
+            ),
+          ),
+        );
       },
     );
   }
@@ -122,7 +141,6 @@ class RoleSelectionScreen extends StatelessWidget {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        // FIXED: Deprecated withOpacity → withValues
                         color: Colors.indigo.withValues(alpha: 0.3),
                         blurRadius: 20,
                         spreadRadius: 5,

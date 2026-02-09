@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Required for crash resilience
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:edtech_offline_app/src/core/ai/ai_service.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
 
@@ -15,7 +15,6 @@ class QuizPlayScreen extends StatefulWidget {
 }
 
 class _QuizPlayScreenState extends State<QuizPlayScreen> {
-  // State Variables
   int _currentQuestionIndex = 0;
   Map<int, String> _userAnswers = {};
   Timer? _timer;
@@ -23,12 +22,12 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
   bool _isSubmitted = false;
   int _score = 0;
   bool _isExplaining = false;
-  bool _isLoadingState = true; // Wait for SharedPreferences to load
+  bool _isLoadingState = true;
 
   @override
   void initState() {
     super.initState();
-    _restoreState(); // Attempt to restore progress on startup
+    _restoreState();
   }
 
   @override
@@ -37,19 +36,16 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
     super.dispose();
   }
 
-  // --- CRASH RESILIENCE LOGIC START ---
-  /// Restores answers and timer state from local storage if the app crashed
   Future<void> _restoreState() async {
     final prefs = await SharedPreferences.getInstance();
     final examId = widget.exam.id ?? 0;
 
-    // 1. Restore Answers
     String? savedAnswers = prefs.getString('quiz_answers_$examId');
     if (savedAnswers != null) {
       try {
         Map<String, dynamic> decoded = jsonDecode(savedAnswers);
+        if (!mounted) return;
         setState(() {
-          // Convert String keys back to Int keys
           _userAnswers =
               decoded.map((k, v) => MapEntry(int.parse(k), v.toString()));
         });
@@ -58,19 +54,12 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
       }
     }
 
-    // 2. Restore Timer
     int? targetEpoch = prefs.getInt('quiz_deadline_$examId');
     if (targetEpoch != null) {
-      // Resume existing session
       final now = DateTime.now().millisecondsSinceEpoch;
       final diff = (targetEpoch - now) ~/ 1000;
-      if (diff > 0) {
-        _remainingSeconds = diff;
-      } else {
-        _remainingSeconds = 0; // Time expired while app was closed
-      }
+      _remainingSeconds = diff > 0 ? diff : 0;
     } else {
-      // Start new session
       _remainingSeconds =
           (widget.exam.timerMinutes > 0 ? widget.exam.timerMinutes : 30) * 60;
       int newTarget =
@@ -78,41 +67,33 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
       await prefs.setInt('quiz_deadline_$examId', newTarget);
     }
 
-    if (mounted) {
-      setState(() => _isLoadingState = false);
-    }
+    if (!mounted) return;
+    setState(() => _isLoadingState = false);
 
-    // 3. Decide Flow
     if (_remainingSeconds > 0) {
       _startTimer();
     } else {
-      _submitQuiz(); // Auto-submit if time ran out
+      _submitQuiz();
     }
   }
 
-  /// Saves the current answer to disk immediately
   Future<void> _saveAnswerLocally(int index, String answer) async {
-    // Save to memory
     setState(() => _userAnswers[index] = answer);
 
-    // Save to disk
     final prefs = await SharedPreferences.getInstance();
     final examId = widget.exam.id ?? 0;
 
-    // Convert int keys to string for JSON encoding
     Map<String, String> exportMap =
         _userAnswers.map((k, v) => MapEntry(k.toString(), v));
     await prefs.setString('quiz_answers_$examId', jsonEncode(exportMap));
   }
 
-  /// Clears local data after successful submission
   Future<void> _clearLocalData() async {
     final prefs = await SharedPreferences.getInstance();
     final examId = widget.exam.id ?? 0;
     await prefs.remove('quiz_answers_$examId');
     await prefs.remove('quiz_deadline_$examId');
   }
-  // --- CRASH RESILIENCE LOGIC END ---
 
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -128,7 +109,7 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
 
   void _submitQuiz() {
     _timer?.cancel();
-    _clearLocalData(); // Clean up storage
+    _clearLocalData();
 
     int correctCount = 0;
     for (int i = 0; i < widget.exam.questions.length; i++) {
@@ -140,19 +121,16 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
       }
     }
 
-    if (mounted) {
-      setState(() {
-        _isSubmitted = true;
-        _score = correctCount;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _isSubmitted = true;
+      _score = correctCount;
+    });
   }
 
-  // --- AI Logic (Explanation) ---
   Future<void> _explainMistake(QuestionModel question, String userAns) async {
     setState(() => _isExplaining = true);
     final aiService = context.read<AIService>();
-    final messenger = ScaffoldMessenger.of(context);
 
     try {
       String actualUserAns = userAns.isEmpty ? "No Answer" : userAns;
@@ -165,7 +143,9 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
       if (!mounted) return;
       _showExplanationDialog(explanation);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text("AI Error: $e")));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("AI Error: $e")));
     } finally {
       if (mounted) {
         setState(() => _isExplaining = false);
@@ -189,7 +169,6 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
     );
   }
 
-  // --- Helper: Parse Options Logic ---
   List<String> _parseOptions(dynamic options) {
     if (options is List) {
       return options.map((e) => e.toString()).toList();
@@ -206,29 +185,24 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
     return [];
   }
 
-  // --- Helper: Timer Formatter ---
   String _formatTime(int seconds) {
     int m = seconds ~/ 60;
     int s = seconds % 60;
     return "${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}";
   }
 
-  // --- UI Builder ---
   @override
   Widget build(BuildContext context) {
-    // 1. Loading State
     if (_isLoadingState) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    // 2. Result State
     if (_isSubmitted) {
       return _buildResultScreen();
     }
 
-    // 3. Quiz State
     final question = widget.exam.questions[_currentQuestionIndex];
     final options = _parseOptions(question.options);
 
@@ -266,15 +240,12 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
       ),
       body: Column(
         children: [
-          // Progress Bar
           LinearProgressIndicator(
             value: (_currentQuestionIndex + 1) / widget.exam.questions.length,
             backgroundColor: Colors.grey.shade200,
             color: Colors.indigo,
             minHeight: 6,
           ),
-
-          // Question Content
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16.0),
@@ -284,14 +255,17 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
                   Text(
                     "Question ${_currentQuestionIndex + 1}/${widget.exam.questions.length}",
                     style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.bold),
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Text(
                     question.questionText,
                     style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w500),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   const SizedBox(height: 24),
 
@@ -302,13 +276,18 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
                           String.fromCharCode(65 + index); // A, B, C...
                       bool isSelected =
                           _userAnswers[_currentQuestionIndex] == optLabel;
-                      return _buildOptionCard(optLabel, options[index],
-                          isSelected, _currentQuestionIndex);
+                      return _buildOptionCard(
+                        optLabel,
+                        options[index],
+                        isSelected,
+                        _currentQuestionIndex,
+                      );
                     })
                   else
                     TextField(
                       controller: TextEditingController(
-                          text: _userAnswers[_currentQuestionIndex]),
+                        text: _userAnswers[_currentQuestionIndex],
+                      ),
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                         labelText: "Type your answer here...",
@@ -433,13 +412,17 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
                       Text(
                         "You scored $_score / ${widget.exam.questions.length}",
                         style: const TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.bold),
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 10),
                       const Text(
                         "Tap on incorrect questions to ask AI for an explanation.",
                         style: TextStyle(
-                            color: Colors.grey, fontStyle: FontStyle.italic),
+                          color: Colors.grey,
+                          fontStyle: FontStyle.italic,
+                        ),
                       ),
                     ],
                   ),

@@ -1,289 +1,128 @@
-import 'dart:convert';
-import 'dart:math';
+import 'dart:convert'; // ✅ Needed for jsonDecode / jsonEncode
 import 'package:logger/logger.dart';
-import 'package:crypto/crypto.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:edtech_offline_app/src/core/ai/ai_service.dart';
-import 'package:edtech_offline_app/src/core/utils/textbook_parser.dart';
-import 'package:edtech_offline_app/src/core/database/database_helper.dart';
-import 'package:edtech_offline_app/services/ai_prompt_service.dart';
-import 'package:edtech_offline_app/services/pdf_service.dart';
-import 'dart:io';
-import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
-import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/quiz_repository.dart';
 
 class AIRepository {
-  final AIService _aiService;
-  final AiPromptService _promptService = AiPromptService();
+  final AIService _aiService = AIService();
   final Logger _logger = Logger();
 
-  AIRepository(this._aiService);
-
-  // --- Quiz Generation ---
-  Future<List<Map<String, dynamic>>> getQuizFromChapter({
-    required String rawContent,
-    required String difficulty,
-    required String type,
-    int count = 5,
-    bool hints = false,
-    List<String>? focusTopics,
-    String? chapterTitle,
+  /// Generate assessment questions using AI
+  Future<List<Map<String, dynamic>>> generateAssessment({
+    required String prompt,
+    int maxTokens = AIService.defaultMaxTokens,
   }) async {
     try {
-      final chunks = TextbookParser.cleanAndChunk(rawContent);
-      if (chunks.isEmpty) return [];
-
-      final context = _selectBestChunk(chunks, focusTopics);
-
-      final prompt = _promptService.buildSectionPrompt(
-        text: context,
-        difficulty: difficulty,
-        sectionType: type,
-        count: count,
-        hintsIncluded: hints,
-        focusTopics: focusTopics,
-      );
-
       final response = await _aiService.generateAssessment(
         prompt: prompt,
-        maxTokens: AIService.defaultMaxTokens,
+        maxTokens: maxTokens,
       );
 
-      if (!_aiService.isResponseValid(response)) return [];
-
-      String cleanJson = _sanitizeJson(response);
-      List<Map<String, dynamic>> questions;
-
-      try {
-        questions = List<Map<String, dynamic>>.from(jsonDecode(cleanJson));
-      } catch (e) {
-        _logger.w("⚠️ JSON decode failed, returning empty list");
+      if (!_aiService.isResponseValid(response)) {
+        _logger.w("⚠️ Invalid AI response for assessment");
         return [];
       }
 
-      questions = _validateQuestions(questions, type);
-
-      // Attach images if relevant
-      if (chapterTitle != null) {
-        final file = File("assets/${chapterTitle.replaceAll(' ', '_')}.pdf");
-        if (await file.exists()) {
-          final images = await PdfService().extractChapterImages(file, 1, 6);
-          for (int i = 0; i < questions.length; i++) {
-            if (questions[i]['q']
-                .toString()
-                .toLowerCase()
-                .contains("photosynthesis")) {
-              questions[i]['image_path'] =
-                  images.isNotEmpty ? images.first : null;
-              questions[i]['caption'] = "Photosynthesis diagram";
-            }
-          }
-        }
+      // Attempt to parse JSON-like response into structured questions
+      try {
+        final parsed = _parseResponse(response);
+        return parsed;
+      } catch (e) {
+        _logger.e("❌ Failed to parse AI response: $e");
+        return [];
       }
-
-      if (chapterTitle != null && questions.isNotEmpty) {
-        await _saveQuestionHistory(questions, chapterTitle, type);
-      }
-
-      _logger.i("✅ Generated ${questions.length} unique questions");
-      return questions;
     } catch (e) {
-      _logger.e("❌ AI Repo Error: $e");
+      _logger.e("❌ Assessment generation error: $e");
       return [];
     }
   }
 
-  // --- Exam Paper Generation ---
+  /// Generate exam paper directly from teacher selections
   Future<List<Map<String, dynamic>>> generateExamPaper({
     required String rawContent,
-    required String tier, // "Basic" or "Advanced"
-    String? chapterTitle,
-    String? subject,
-    String? className,
+    required String tier, // Easy / Medium / Hard
+    required List<Map<String, dynamic>>
+        types, // Teacher-selected question types
+    void Function(double progress)? onProgress, // ✅ added for progress updates
   }) async {
-    final chunks = TextbookParser.cleanAndChunk(rawContent);
-    if (chunks.isEmpty) return [];
-
-    final context = chunks.first;
     List<Map<String, dynamic>> paper = [];
 
-    if (tier == "Basic") {
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context, difficulty: "Easy", type: "MCQ", count: 5));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context,
-          difficulty: "Easy",
-          type: "Fill-up",
-          count: 5,
-          hints: true));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context,
-          difficulty: "Easy",
-          type: "OddOneOut",
-          count: 5));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context,
-          difficulty: "Easy",
-          type: "Rearrange",
-          count: 5));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context,
-          difficulty: "Medium",
-          type: "ShortAns",
-          count: 7));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context,
-          difficulty: "Medium",
-          type: "MatchIt",
-          count: 5));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context, difficulty: "Hard", type: "LongAns", count: 7));
-    } else {
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context, difficulty: "Easy", type: "MCQ", count: 5));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context, difficulty: "Easy", type: "Fill-up", count: 5));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context,
-          difficulty: "Easy",
-          type: "True/False",
-          count: 5));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context,
-          difficulty: "Easy",
-          type: "OddOneOut",
-          count: 5));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context,
-          difficulty: "Medium",
-          type: "ShortAns",
-          count: 7));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context,
-          difficulty: "Medium",
-          type: "CaseStudy",
-          count: 1));
-      paper.addAll(await getQuizFromChapter(
-          rawContent: context, difficulty: "Hard", type: "LongAns", count: 7));
+    for (int i = 0; i < types.length; i++) {
+      final typeConfig = types[i];
+      final type = typeConfig['type'];
+      final count = typeConfig['count'];
+      final marks = typeConfig['marks'];
+
+      // Build a prompt for each type
+      final prompt = """
+Generate $count $tier questions of type $type
+from the following content: $rawContent.
+Each question should include:
+- question
+- options (if applicable)
+- correct
+- explanation
+- marks ($marks per question)
+Format output as JSON list.
+""";
+
+      final questions = await generateAssessment(prompt: prompt);
+
+      // Attach marks per question explicitly
+      for (var q in questions) {
+        q['marks'] = marks;
+      }
+
+      paper.addAll(questions);
+
+      // ✅ Update progress after each type is processed
+      onProgress?.call((i + 1) / types.length);
     }
-
-    // ✅ Save exam to DB so dashboard shows it
-    final exam = ExamModel(
-      title: "${className ?? 'Class'} ${subject ?? 'Subject'} - $tier Tier",
-      difficulty: tier,
-      timestamp: DateTime.now().toIso8601String(),
-      questions: paper
-          .map((q) => QuestionModel(
-                questionText: q['q'],
-                options: q['o'],
-                correctAnswer: q['a'],
-                marks: 1,
-                imagePath: q['image_path'],
-              ))
-          .toList(),
-    );
-
-    await QuizRepository().saveExam(exam);
 
     _logger.i("📄 Generated ${paper.length} questions for $tier tier exam");
     return paper;
   }
 
-  // --- Validation, Deduplication, History ---
-  List<Map<String, dynamic>> _validateQuestions(
-      List<Map<String, dynamic>> questions, String type) {
-    List<Map<String, dynamic>> validated = [];
-    for (var q in questions) {
-      String questionText = q['q'] ?? q['question'] ?? '';
-      if (questionText.isEmpty || questionText.length < 10) continue;
-      validated.add(q);
-    }
-    return validated;
-  }
-
-  Future<void> _saveQuestionHistory(List<Map<String, dynamic>> questions,
-      String chapterTitle, String type) async {
+  /// Explain mistakes in student answers
+  Future<String> explainMistake({
+    required String question,
+    required String studentAns,
+    required String correctAns,
+  }) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      for (var q in questions) {
-        String questionText = q['q'] ?? q['question'] ?? '';
-        if (questionText.isEmpty) continue;
-        String hash = _generateQuestionHash(questionText);
-        await db.insert(
-          'question_history',
-          {
-            'chapter_title': chapterTitle,
-            'topic': type,
-            'question_hash': hash,
-            'generated_at': DateTime.now().toIso8601String(),
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-      }
-      _logger.d("💾 Saved ${questions.length} questions to history");
+      final response = await _aiService.explainMistake(
+        question: question,
+        studentAns: studentAns,
+        correctAns: correctAns,
+      );
+
+      return response;
     } catch (e) {
-      _logger.w("⚠️ Failed to save history: $e");
+      _logger.e("❌ Mistake explanation error: $e");
+      return "Unable to generate explanation at this time.";
     }
   }
 
-  String _generateQuestionHash(String questionText) {
-    String normalized = questionText
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^\w\s]'), '')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    var bytes = utf8.encode(normalized);
-    var digest = sha256.convert(bytes);
-    return digest.toString();
-  }
-
-  String _sanitizeJson(String raw) {
+  /// Internal helper: parse AI JSON-like response into structured list
+  List<Map<String, dynamic>> _parseResponse(String response) {
     try {
-      String clean = raw
-          .trim()
-          .replaceAll('json', '')
-          .replaceAll('', '')
-          .replaceAll('\n', ' ');
+      String cleaned = response.trim();
 
-      int start = clean.indexOf('[');
-      int end = clean.lastIndexOf(']');
-      if (start != -1 && end != -1 && end > start) {
-        return clean.substring(start, end + 1);
+      // Ensure starts with [ and ends with ]
+      if (!cleaned.startsWith("[")) {
+        cleaned = "[$cleaned]";
       }
 
-      if (clean.startsWith('{') && clean.endsWith('}')) {
-        return "[$clean]";
-      }
+      final decoded = jsonDecode(cleaned);
 
-      return clean; // fallback
+      if (decoded is List) {
+        return decoded.cast<Map<String, dynamic>>();
+      } else {
+        _logger.w("⚠️ Response not a list, returning empty");
+        return [];
+      }
     } catch (e) {
-      _logger.e("❌ JSON sanitization failed: $e");
-      return "[]";
+      _logger.w("⚠️ Response not valid JSON, returning empty list");
+      return [];
     }
-  }
-
-  String _selectBestChunk(List<String> chunks, List<String>? focusTopics) {
-    if (focusTopics == null || focusTopics.isEmpty) {
-      return chunks[Random().nextInt(chunks.length)];
-    }
-
-    int bestScore = 0;
-    String bestChunk = chunks.first;
-
-    for (var chunk in chunks) {
-      int score = 0;
-      String lowerChunk = chunk.toLowerCase();
-      for (var topic in focusTopics) {
-        if (lowerChunk.contains(topic.toLowerCase())) {
-          score += 10;
-        }
-      }
-      if (score > bestScore) {
-        bestScore = score;
-        bestChunk = chunk;
-      }
-    }
-
-    return bestChunk;
   }
 }

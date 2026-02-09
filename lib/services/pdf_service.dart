@@ -11,6 +11,7 @@ class PdfService {
   final Logger _logger = Logger();
   final Uuid _uuid = const Uuid();
 
+  /// Allow teacher to pick a textbook PDF file
   Future<File?> pickTextbook() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -26,15 +27,18 @@ class PdfService {
     return null;
   }
 
+  /// Scan PDF for chapters using TOC or fallback heading detection
   Future<List<Map<String, dynamic>>> getChapters(File file) async {
     List<Map<String, dynamic>> chapters = [];
     sf_pdf.PdfDocument? document;
 
     try {
       if (!await file.exists()) return [];
+
       document = sf_pdf.PdfDocument(inputBytes: await file.readAsBytes());
       int total = document.pages.count;
       int scan = total < 15 ? total : 15;
+
       sf_pdf.PdfTextExtractor extractor = sf_pdf.PdfTextExtractor(document);
 
       // First scan: look for TOC in first 10–15 pages
@@ -83,15 +87,19 @@ class PdfService {
     }
   }
 
+  /// Extract text for selected chapter range
   Future<String> extractChapterText(File file, int start, int end) async {
     sf_pdf.PdfDocument? document;
     try {
       if (!await file.exists()) return "";
+
       document = sf_pdf.PdfDocument(inputBytes: await file.readAsBytes());
       StringBuffer buffer = StringBuffer();
       int pageCount = document.pages.count;
+
       int s = start < 1 ? 1 : start;
       int e = end > pageCount ? pageCount : end;
+
       sf_pdf.PdfTextExtractor extractor = sf_pdf.PdfTextExtractor(document);
 
       for (int i = s - 1; i < e; i++) {
@@ -99,6 +107,7 @@ class PdfService {
             extractor.extractText(startPageIndex: i, endPageIndex: i);
         buffer.writeln(pageText);
       }
+
       return buffer.toString();
     } catch (e) {
       _logger.e("Text extraction error: $e");
@@ -108,12 +117,14 @@ class PdfService {
     }
   }
 
+  /// Extract representative images from chapter pages
   Future<List<String>> extractChapterImages(
       File file, int start, int end) async {
     List<String> paths = [];
     try {
       final tempDir = await getTemporaryDirectory();
       final pdfBytes = await file.readAsBytes();
+
       int s = start < 1 ? 1 : start;
       List<int> pagesToRender = [];
       int count = end - s + 1;
@@ -139,6 +150,7 @@ class PdfService {
 
           img.Image resized = img.copyResize(square, width: 864, height: 864);
           List<int> processedPng = img.encodePng(resized);
+
           String name = "img_${_uuid.v4()}.png";
           File f = File('${tempDir.path}/$name');
           await f.writeAsBytes(processedPng);
@@ -150,57 +162,71 @@ class PdfService {
     } catch (e) {
       _logger.e("Image extraction error: $e");
     }
+
     return paths;
   }
 
-  Future<List<String>> scanChapterSubtopics(File f, int s, int e) async {
-    try {
-      final text = await extractChapterText(f, s, e);
-      final lines = text.split('\n');
-      final subtopics = <String>[];
-
-      for (var line in lines) {
-        final trimmed = line.trim();
-        if (trimmed.isEmpty) continue;
-
-        // ✅ Stronger heading detection
-        if (RegExp(r'^(Chapter\s+\d+|[A-Z][A-Za-z\s]+:)$').hasMatch(trimmed)) {
-          subtopics.add(trimmed);
-        }
-      }
-
-      return subtopics.isEmpty
-          ? ["Introduction", "Main Concept", "Examples", "Summary"]
-          : subtopics;
-    } catch (e) {
-      _logger.w("Subtopic scan failed: $e");
-      return ["Introduction", "Main Concept", "Examples", "Summary"];
-    }
-  }
-
+  /// Parse TOC lines into chapter metadata - FIXED for multi-line format
   List<Map<String, dynamic>> _parseTocLines(List<String> lines, int total) {
     List<Map<String, dynamic>> found = [];
-    final re =
-        RegExp(r"^Chapter\s+(\d+):\s+(.+)\s+(\d+)$", caseSensitive: false);
-    for (String line in lines) {
-      String t = line.trim();
-      if (t.isEmpty || t.length > 100) continue;
-      final m = re.firstMatch(t);
-      if (m != null) {
-        try {
-          int p = int.parse(m.group(3)!);
-          if (p > 0 && p <= total) {
+
+    // Try multi-line TOC format first (Chapter 1 \n Title \n Page)
+    for (int i = 0; i < lines.length - 2; i++) {
+      String line1 = lines[i].trim();
+      String line2 = lines[i + 1].trim();
+      String line3 = lines[i + 2].trim();
+
+      // Pattern: "Chapter N" on line 1
+      RegExp chapterNumPattern =
+          RegExp(r'^Chapter\s+(\d+)$', caseSensitive: false);
+      var match = chapterNumPattern.firstMatch(line1);
+
+      if (match != null) {
+        String chapterNum = match.group(1)!;
+
+        // Line 2 should be the title (not empty, not a number)
+        if (line2.isNotEmpty && !RegExp(r'^\d+$').hasMatch(line2)) {
+          // Line 3 should be the page number
+          int? pageNum = int.tryParse(line3.trim());
+
+          if (pageNum != null && pageNum > 0 && pageNum <= total) {
             found.add({
-              'chapterNumber': m.group(1)!,
-              'title': m.group(2)!.trim(),
-              'startPage': p,
+              'chapterNumber': chapterNum,
+              'title': line2,
+              'startPage': pageNum,
               'endPage': total,
               'topics': <String>[]
             });
           }
-        } catch (_) {}
+        }
       }
     }
+
+    // If multi-line didn't work, try single-line format
+    if (found.isEmpty) {
+      final re =
+          RegExp(r"^Chapter\s+(\d+):\s+(.+)\s+(\d+)$", caseSensitive: false);
+      for (String line in lines) {
+        String t = line.trim();
+        if (t.isEmpty || t.length > 100) continue;
+        final m = re.firstMatch(t);
+        if (m != null) {
+          try {
+            int p = int.parse(m.group(3)!);
+            if (p > 0 && p <= total) {
+              found.add({
+                'chapterNumber': m.group(1)!,
+                'title': m.group(2)!.trim(),
+                'startPage': p,
+                'endPage': total,
+                'topics': <String>[]
+              });
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
     return found;
   }
 }

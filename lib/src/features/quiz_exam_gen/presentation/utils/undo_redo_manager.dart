@@ -1,63 +1,50 @@
-import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
+/// A simple Undo/Redo manager to track changes in exam editing.
+/// Stores a stack of states and allows stepping backward/forward.
+class UndoRedoManager<T> {
+  final List<T> _undoStack = [];
+  final List<T> _redoStack = [];
 
-/// Manages undo/redo operations for question editing
-class UndoRedoManager {
-  final List<List<QuestionModel>> _undoStack = [];
-  final List<List<QuestionModel>> _redoStack = [];
-  final int maxStackSize;
+  /// Current state
+  T? _current;
 
-  UndoRedoManager({this.maxStackSize = 50});
+  /// Returns the current state
+  T? get current => _current;
 
-  void saveState(List<QuestionModel> questions) {
-    final snapshot = questions.map((q) => _copyQuestion(q)).toList();
-    _undoStack.add(snapshot);
-    _redoStack.clear();
-
-    if (_undoStack.length > maxStackSize) {
-      _undoStack.removeAt(0);
+  /// Apply a new state and clear redo history
+  void apply(T newState) {
+    if (_current != null) {
+      _undoStack.add(_current as T);
     }
+    _current = newState;
+    _redoStack.clear();
   }
 
-  List<QuestionModel>? undo(List<QuestionModel> currentQuestions) {
-    if (!canUndo) return null;
-
-    final currentSnapshot =
-        currentQuestions.map((q) => _copyQuestion(q)).toList();
-    _redoStack.add(currentSnapshot);
-
-    return _undoStack.removeLast();
+  /// Undo the last change
+  T? undo() {
+    if (_undoStack.isEmpty) return _current;
+    _redoStack.add(_current as T);
+    _current = _undoStack.removeLast();
+    return _current;
   }
 
-  List<QuestionModel>? redo(List<QuestionModel> currentQuestions) {
-    if (!canRedo) return null;
-
-    final currentSnapshot =
-        currentQuestions.map((q) => _copyQuestion(q)).toList();
-    _undoStack.add(currentSnapshot);
-
-    return _redoStack.removeLast();
+  /// Redo the last undone change
+  T? redo() {
+    if (_redoStack.isEmpty) return _current;
+    _undoStack.add(_current as T);
+    _current = _redoStack.removeLast();
+    return _current;
   }
 
-  bool get canUndo => _undoStack.isNotEmpty;
-  bool get canRedo => _redoStack.isNotEmpty;
-  int get undoCount => _undoStack.length;
-  int get redoCount => _redoStack.length;
-
+  /// Clear all history
   void clear() {
     _undoStack.clear();
     _redoStack.clear();
+    _current = null;
   }
 
-  QuestionModel _copyQuestion(QuestionModel q) {
-    return QuestionModel(
-      id: q.id,
-      examId: q.examId,
-      questionText: q.questionText,
-      options: q.options is List ? List.from(q.options as List) : q.options,
-      correctAnswer: q.correctAnswer,
-      explanation: q.explanation,
-      marks: q.marks,
-      imagePath: q.imagePath,
-    );
-  }
+  /// Check if undo is possible
+  bool get canUndo => _undoStack.isNotEmpty;
+
+  /// Check if redo is possible
+  bool get canRedo => _redoStack.isNotEmpty;
 }

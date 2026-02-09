@@ -22,13 +22,12 @@ class _StudentQuizListScreenState extends State<StudentQuizListScreen> {
 
   Future<void> _loadQuizzes() async {
     final repo = context.read<QuizRepository>();
-    final exams = await repo.getAllExams();
+    final quizzes = await repo.getAllQuizzes();
+
     if (mounted) {
       setState(() {
-        // Filter out "Advanced" papers meant for printing (Module 6),
-        // keeping only "Mixed" or "Quiz" types for interactive play if needed,
-        // or just show all digital exams.
-        _availableQuizzes = exams;
+        // Only show published quizzes (teacher side sets exam.type = "quiz")
+        _availableQuizzes = quizzes.where((q) => q.type == "quiz").toList();
         _isLoading = false;
       });
     }
@@ -36,6 +35,15 @@ class _StudentQuizListScreenState extends State<StudentQuizListScreen> {
 
   void _startQuiz(ExamModel exam) {
     Navigator.pushNamed(context, '/quiz-play', arguments: exam);
+  }
+
+  String _formatTimer(int minutes) {
+    final hours = minutes ~/ 60;
+    final mins = minutes % 60;
+    if (hours > 0) {
+      return mins > 0 ? "$hours hrs $mins mins" : "$hours hrs";
+    }
+    return "$mins mins";
   }
 
   @override
@@ -53,17 +61,20 @@ class _StudentQuizListScreenState extends State<StudentQuizListScreen> {
                     final exam = _availableQuizzes[i];
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
+                      elevation: 2,
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: Colors.indigo.shade100,
                           child: const Icon(Icons.assignment,
                               color: Colors.indigo),
                         ),
-                        title: Text(exam.title,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Text(
+                          exam.title,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         subtitle: Text(
-                          "Difficulty: ${exam.difficulty} • ${exam.questions.length} Questions\nTime: ${exam.timerMinutes} mins",
+                          "Difficulty: ${exam.difficulty}\n"
+                          "${exam.questions.length} Questions • ${_formatTimer(exam.timerMinutes)} • ${exam.totalMarks} marks",
                         ),
                         trailing: ElevatedButton(
                           onPressed: () => _startQuiz(exam),

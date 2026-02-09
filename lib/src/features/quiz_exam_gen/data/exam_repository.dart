@@ -2,95 +2,95 @@ import 'package:edtech_offline_app/src/core/database/database_helper.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
 import 'package:logger/logger.dart';
 
-class QuizRepository {
+class ExamRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   final Logger _logger = Logger();
 
-  /// Save a quiz to the DB
-  Future<int> saveQuiz(ExamModel quiz) async {
+  /// Save an exam to the DB
+  Future<int> saveExam(ExamModel exam) async {
     try {
-      quiz.type = "quiz"; // ✅ enforce type
+      exam.type = "exam"; // ✅ enforce type
       final db = await _dbHelper.database;
       return await db.transaction((txn) async {
-        int quizId = await txn.insert('exams', quiz.toMap());
-        quiz.id = quizId; // ✅ assign ID back to model
-        for (var q in quiz.questions) {
-          await txn.insert('questions', q.toMap()..['exam_id'] = quizId);
+        int examId = await txn.insert('exams', exam.toMap());
+        exam.id = examId; // ✅ assign ID back to model
+        for (var q in exam.questions) {
+          await txn.insert('questions', q.toMap()..['exam_id'] = examId);
         }
         _logger
-            .i("✅ Saved quiz #$quizId with ${quiz.questions.length} questions");
-        return quizId;
+            .i("✅ Saved exam #$examId with ${exam.questions.length} questions");
+        return examId;
       });
     } catch (e) {
-      _logger.e("❌ Error saving quiz: $e");
+      _logger.e("❌ Error saving exam: $e");
       return -1;
     }
   }
 
-  /// Get a single quiz by ID
-  Future<ExamModel?> getQuiz(int id) async {
+  /// Get a single exam by ID
+  Future<ExamModel?> getExam(int id) async {
     try {
       final db = await _dbHelper.database;
       final rows = await db.query(
         'exams',
         where: 'id = ? AND type = ?',
-        whereArgs: [id, "quiz"],
+        whereArgs: [id, "exam"],
       );
       if (rows.isEmpty) return null;
 
-      final quiz = ExamModel.fromMap(rows.first);
+      final exam = ExamModel.fromMap(rows.first);
       final questionRows = await db
-          .query('questions', where: 'exam_id = ?', whereArgs: [quiz.id]);
-      quiz.questions.addAll(
+          .query('questions', where: 'exam_id = ?', whereArgs: [exam.id]);
+      exam.questions.addAll(
         questionRows.map((q) => QuestionModel.fromMap(q)).toList(),
       );
-      return quiz;
+      return exam;
     } catch (e) {
-      _logger.e("❌ Error loading quiz: $e");
+      _logger.e("❌ Error loading exam: $e");
       return null;
     }
   }
 
-  /// Get all quizzes
-  Future<List<ExamModel>> getAllQuizzes() async {
+  /// Get all exams
+  Future<List<ExamModel>> getAllExams() async {
     try {
       final db = await _dbHelper.database;
       final rows = await db.query(
         'exams',
         where: 'type = ?',
-        whereArgs: ["quiz"],
+        whereArgs: ["exam"],
         orderBy: 'timestamp DESC',
       );
-      List<ExamModel> quizzes = [];
+      List<ExamModel> exams = [];
       for (var row in rows) {
-        final quiz = ExamModel.fromMap(row);
+        final exam = ExamModel.fromMap(row);
         final questionRows = await db
-            .query('questions', where: 'exam_id = ?', whereArgs: [quiz.id]);
-        quiz.questions.addAll(
+            .query('questions', where: 'exam_id = ?', whereArgs: [exam.id]);
+        exam.questions.addAll(
           questionRows.map((q) => QuestionModel.fromMap(q)).toList(),
         );
-        quizzes.add(quiz);
+        exams.add(exam);
       }
-      return quizzes;
+      return exams;
     } catch (e) {
-      _logger.e("❌ Error loading quizzes: $e");
+      _logger.e("❌ Error loading exams: $e");
       return [];
     }
   }
 
-  /// Delete a quiz by ID
-  Future<void> deleteQuiz(int id) async {
+  /// Delete an exam by ID
+  Future<void> deleteExam(int id) async {
     try {
       final db = await _dbHelper.database;
       await db.delete('questions', where: 'exam_id = ?', whereArgs: [id]);
       await db.delete(
         'exams',
         where: 'id = ? AND type = ?',
-        whereArgs: [id, "quiz"],
+        whereArgs: [id, "exam"],
       );
-      _logger.i("🗑️ Deleted quiz $id");
+      _logger.i("🗑️ Deleted exam $id");
     } catch (e) {
-      _logger.e("❌ Error deleting quiz: $e");
+      _logger.e("❌ Error deleting exam: $e");
     }
   }
 }
