@@ -15,7 +15,6 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _topicsController = TextEditingController();
 
-  // FIXED: Only tier selection needed (100 marks is automatic)
   String _selectedTier = "Basic"; // Basic or Advanced
   bool _isGenerating = false;
 
@@ -28,9 +27,7 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
 
   Future<void> _generateExam(
       BuildContext context, AssessmentProvider provider) async {
-    // Capture ScaffoldMessenger before async gap
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    // Capture Navigator before async gap
     final navigator = Navigator.of(context);
 
     if (_titleController.text.trim().isEmpty) {
@@ -43,7 +40,6 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
     setState(() => _isGenerating = true);
 
     try {
-      // FIXED: Call with tier, topics, and raw content
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       final rawContent = args?['rawContent'] ?? '';
@@ -103,24 +99,24 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
             // Info card
             Card(
               color: Colors.blue.shade50,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
+              child: const Padding(
+                padding: EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.info_outline, color: Colors.blue.shade700),
-                        const SizedBox(width: 8),
-                        const Text(
+                        Icon(Icons.info_outline, color: Colors.blue),
+                        SizedBox(width: 8),
+                        Text(
                           "Automatic 100 Marks Papers",
                           style: TextStyle(
                               fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
+                    SizedBox(height: 8),
+                    Text(
                       "• Basic Tier: Section A (20) + B (15) + C (35) + D (30) = 100\n"
                       "• Advanced Tier: Section A (20) + B (25) + C (5) + D (50) = 100\n"
                       "• Fixed structure as per government curriculum",
@@ -155,7 +151,7 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Tier selection (RadioGroup API)
+            // Tier selection
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -175,20 +171,20 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
                           setState(() => _selectedTier = val);
                         }
                       },
-                      child: Column(
+                      child: const Column(
                         children: [
                           RadioListTile<String>(
                             value: "Basic",
-                            title: const Text("Basic Tier"),
-                            subtitle: const Text(
+                            title: Text("Basic Tier"),
+                            subtitle: Text(
                               "MCQ (5) + Fill-up (5) + Odd One Out (5) + Rearrange (5)\n"
                               "+ Match It (5×3) + Short Ans (7×5) + Long Ans (3×10)",
                             ),
                           ),
                           RadioListTile<String>(
                             value: "Advanced",
-                            title: const Text("Advanced Tier"),
-                            subtitle: const Text(
+                            title: Text("Advanced Tier"),
+                            subtitle: Text(
                               "MCQ (5) + Fill-up (5) + True/False (5) + Odd One Out (5)\n"
                               "+ Short Ans (5×5) + Case Study (1×5) + Long Ans (5×10)",
                             ),
