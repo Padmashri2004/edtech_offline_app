@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:logger/logger.dart';
-import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/providers/exam_provider.dart';
+import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/providers/assessment_provider.dart';
 
 class QuizGenScreen extends StatefulWidget {
   const QuizGenScreen({super.key});
@@ -55,7 +55,7 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
     super.dispose();
   }
 
-  Future<void> _generateQuiz(ExamProvider examProvider) async {
+  Future<void> _generateQuiz(AssessmentProvider provider) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
@@ -123,7 +123,7 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
       return;
     }
 
-    await examProvider.generateExam(
+    await provider.generateQuiz(
       title: title,
       difficulty: tier,
       topics: topics,
@@ -134,10 +134,10 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
 
     if (!mounted) return;
 
-    if (examProvider.error != null) {
-      _logger.e("Quiz generation failed: ${examProvider.error}");
+    if (provider.error != null) {
+      _logger.e("Quiz generation failed: ${provider.error}");
       scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text(examProvider.error!)),
+        SnackBar(content: Text(provider.error!)),
       );
     } else {
       navigator.pushNamed("/quizPreview");
@@ -146,7 +146,7 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final examProvider = Provider.of<ExamProvider>(context);
+    final provider = Provider.of<AssessmentProvider>(context);
 
     return Scaffold(
       appBar: AppBar(title: const Text("Generate Quiz")),
@@ -217,10 +217,9 @@ class _QuizGenScreenState extends State<QuizGenScreen> {
                 )),
 
             ElevatedButton(
-              onPressed: examProvider.isLoading
-                  ? null
-                  : () => _generateQuiz(examProvider),
-              child: examProvider.isLoading
+              onPressed:
+                  provider.isLoading ? null : () => _generateQuiz(provider),
+              child: provider.isLoading
                   ? const CircularProgressIndicator()
                   : const Text("Generate Quiz"),
             ),

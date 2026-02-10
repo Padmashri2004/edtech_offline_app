@@ -5,11 +5,11 @@ import 'package:edtech_offline_app/src/core/database/database_helper.dart';
 import 'package:edtech_offline_app/src/core/ai/ai_service.dart';
 import 'package:edtech_offline_app/src/core/utils/asset_manager.dart';
 import 'package:edtech_offline_app/src/features/ai_assistant/data/ai_repository.dart';
-import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/quiz_repository.dart';
+import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/assessment_repository.dart'; // FIXED: Use unified repository
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/domain/paper_generation_service.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/domain/pdf_export_service.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
-import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/providers/exam_provider.dart';
+import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/providers/assessment_provider.dart'; // FIXED: Use unified provider
 import 'package:edtech_offline_app/src/features/textbook_viewer/presentation/chapter_list_screen.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/quiz_gen_screen.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/paper_gen_screen.dart';
@@ -32,21 +32,25 @@ void main() async {
 
   // Initialize services
   final aiService = AIService();
-  final aiRepository = AIRepository(); // ✅ Fixed: No parameter needed
-  final quizRepository = QuizRepository();
+  final aiRepository = AIRepository();
+  final assessmentRepository =
+      AssessmentRepository(); // FIXED: Use unified repository
 
   runApp(
     MultiProvider(
       providers: [
         Provider<AIService>(create: (_) => aiService),
         Provider<AIRepository>(create: (_) => aiRepository),
-        Provider<QuizRepository>(create: (_) => quizRepository),
+        Provider<AssessmentRepository>(
+            create: (_) => assessmentRepository), // FIXED: Single repository
         Provider<PaperGenerationService>(
-          create: (_) => PaperGenerationService(
-              aiRepository), // ✅ Fixed: Only one parameter
+          create: (_) => PaperGenerationService(aiRepository),
         ),
         Provider<PDFExportService>(create: (_) => PDFExportService()),
-        ChangeNotifierProvider<ExamProvider>(create: (_) => ExamProvider()),
+        ChangeNotifierProvider<AssessmentProvider>(
+          // FIXED: Use unified provider
+          create: (_) => AssessmentProvider(),
+        ),
       ],
       child: const EdTechApp(),
     ),
@@ -114,211 +118,112 @@ class RoleSelectionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Offline EdTech Portal"),
-        centerTitle: true,
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-      ),
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
+            colors: [Colors.indigo, Colors.blue],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.indigo.shade50, Colors.white],
           ),
         ),
-        child: Center(
-          child: SingleChildScrollView(
+        child: SafeArea(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.school, size: 100, color: Colors.white),
+              const SizedBox(height: 20),
+              const Text(
+                "Offline EdTech Portal",
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                "Government School Edition",
+                style: TextStyle(fontSize: 16, color: Colors.white70),
+              ),
+              const SizedBox(height: 60),
+              _RoleCard(
+                icon: Icons.person,
+                title: "Teacher Portal",
+                subtitle: "Create Quizzes & Exam Papers",
+                onTap: () => Navigator.pushNamed(context, '/teacher-dashboard'),
+              ),
+              const SizedBox(height: 20),
+              _RoleCard(
+                icon: Icons.school,
+                title: "Student Portal",
+                subtitle: "Take Quizzes & Assessments",
+                onTap: () => Navigator.pushNamed(context, '/student-quiz-list'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoleCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _RoleCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 40),
+      child: Card(
+        elevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.indigo.withValues(alpha: 0.3),
-                        blurRadius: 20,
-                        spreadRadius: 5,
+                Icon(icon, size: 48, color: Colors.indigo),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black54,
+                        ),
                       ),
                     ],
                   ),
-                  child: Icon(Icons.school,
-                      size: 80, color: Colors.indigo.shade600),
                 ),
-                const SizedBox(height: 30),
-                const Text("Select Your Role",
-                    style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.indigo)),
-                const SizedBox(height: 10),
-                Text("Powered by AI • 100% Offline",
-                    style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey.shade600,
-                        fontStyle: FontStyle.italic)),
-                const SizedBox(height: 50),
-                _RoleButton(
-                  icon: Icons.library_books,
-                  label: "Teacher Portal",
-                  subtitle: "Create Quizzes & Exam Papers",
-                  color: Colors.indigo,
-                  isPrimary: true,
-                  onPressed: () =>
-                      Navigator.pushNamed(context, '/teacher-dashboard'),
-                ),
-                const SizedBox(height: 20),
-                _RoleButton(
-                  icon: Icons.child_care,
-                  label: "Student Portal",
-                  subtitle: "Take Quizzes & View Results",
-                  color: Colors.indigo,
-                  isPrimary: false,
-                  onPressed: () =>
-                      Navigator.pushNamed(context, '/student-quiz-list'),
-                ),
-                const SizedBox(height: 50),
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.indigo.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.indigo.shade100),
-                  ),
-                  child: Column(
-                    children: [
-                      _InfoRow(
-                          icon: Icons.offline_bolt,
-                          text: "Works without Internet",
-                          color: Colors.green),
-                      const SizedBox(height: 12),
-                      _InfoRow(
-                          icon: Icons.security,
-                          text: "100% Privacy • Data stays on device",
-                          color: Colors.blue),
-                      const SizedBox(height: 12),
-                      _InfoRow(
-                          icon: Icons.smart_toy,
-                          text: "Powered by Gemma 270M AI",
-                          color: Colors.orange),
-                    ],
-                  ),
-                ),
+                const Icon(Icons.arrow_forward_ios, color: Colors.indigo),
               ],
             ),
           ),
         ),
       ),
-    );
-  }
-}
-
-class _RoleButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final Color color;
-  final bool isPrimary;
-  final VoidCallback onPressed;
-
-  const _RoleButton({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.color,
-    required this.isPrimary,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 320,
-      child: isPrimary
-          ? ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color,
-                foregroundColor: Colors.white,
-                elevation: 8,
-                padding: const EdgeInsets.all(20),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-              ),
-              onPressed: onPressed,
-              child:
-                  _ButtonContent(icon: icon, label: label, subtitle: subtitle),
-            )
-          : OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: color,
-                side: BorderSide(color: color, width: 2),
-                padding: const EdgeInsets.all(20),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-              ),
-              onPressed: onPressed,
-              child:
-                  _ButtonContent(icon: icon, label: label, subtitle: subtitle),
-            ),
-    );
-  }
-}
-
-class _ButtonContent extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String subtitle;
-
-  const _ButtonContent(
-      {required this.icon, required this.label, required this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 40),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              Text(subtitle, style: const TextStyle(fontSize: 12)),
-            ],
-          ),
-        ),
-        const Icon(Icons.arrow_forward_ios, size: 20),
-      ],
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final Color color;
-
-  const _InfoRow({required this.icon, required this.text, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 20, color: color),
-        const SizedBox(width: 12),
-        Expanded(
-            child: Text(text,
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w500))),
-      ],
     );
   }
 }

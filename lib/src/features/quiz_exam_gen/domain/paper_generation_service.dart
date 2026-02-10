@@ -184,12 +184,10 @@ class PaperGenerationService {
 
     switch (type) {
       case 'MCQ':
-        instructions =
-            "Generate $count Multiple Choice Questions with 4 options each.";
+        instructions = "Generate $count Multiple Choice Questions with 4 options each.";
         break;
       case 'Fill-up':
-        instructions =
-            "Generate $count Fill-in-the-blank questions with hints.";
+        instructions = "Generate $count Fill-in-the-blank questions with hints.";
         break;
       case 'True/False':
         instructions = "Generate $count True/False statements.";
@@ -201,20 +199,16 @@ class PaperGenerationService {
         instructions = "Generate $count sentence rearrangement questions.";
         break;
       case 'MatchIt':
-        instructions =
-            "Generate $count matching pairs (left item = question, right match = answer).";
+        instructions = "Generate $count matching pairs (left item = question, right match = answer).";
         break;
       case 'CaseStudy':
-        instructions =
-            "Generate 1 case study with scenario and analytical question.";
+        instructions = "Generate 1 case study with scenario and analytical question.";
         break;
       case 'ShortAns':
-        instructions =
-            "Generate $count short answer questions (2-3 sentences).";
+        instructions = "Generate $count short answer questions (2-3 sentences).";
         break;
       case 'LongAns':
-        instructions =
-            "Generate $count detailed answer questions (5-6 sentences).";
+        instructions = "Generate $count detailed answer questions (5-6 sentences).";
         break;
       default:
         instructions = "Generate $count questions.";

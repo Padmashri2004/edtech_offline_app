@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
-import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/quiz_repository.dart';
-import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/exam_repository.dart';
+import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/providers/assessment_provider.dart';
 
 class TeacherDashboard extends StatefulWidget {
   const TeacherDashboard({super.key});
@@ -10,39 +10,16 @@ class TeacherDashboard extends StatefulWidget {
   State<TeacherDashboard> createState() => _TeacherDashboardState();
 }
 
-class _TeacherDashboardState extends State<TeacherDashboard>
-    with SingleTickerProviderStateMixin {
-  final QuizRepository _quizRepo = QuizRepository();
-  final ExamRepository _examRepo = ExamRepository();
-
-  List<ExamModel> _quizzes = [];
-  List<ExamModel> _exams = [];
-  bool _loading = true;
-
-  late TabController _tabController;
-
+class _TeacherDashboardState extends State<TeacherDashboard> {
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _loadAssessments();
-  }
-
-  Future<void> _loadAssessments() async {
-    final quizzes = await _quizRepo.getAllQuizzes();
-    final exams = await _examRepo.getAllExams();
-    if (!mounted) return;
-    setState(() {
-      _quizzes = quizzes;
-      _exams = exams;
-      _loading = false;
+    // FIXED: Check mounted to avoid BuildContext async gap warning
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AssessmentProvider>().loadAllAssessments();
+      }
     });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   String _formatDate(String isoDate) {
@@ -54,145 +31,200 @@ class _TeacherDashboardState extends State<TeacherDashboard>
     }
   }
 
-  Future<void> _deleteAssessment(
-      BuildContext context, int assessmentId, bool isQuiz) async {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    if (isQuiz) {
-      await _quizRepo.deleteQuiz(assessmentId);
-    } else {
-      await _examRepo.deleteExam(assessmentId);
-    }
-
-    if (!mounted) return;
-
-    _loadAssessments();
-    scaffoldMessenger.showSnackBar(
-      const SnackBar(content: Text("Assessment deleted")),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Teacher Dashboard',
-      routes: {
-        '/quiz-gen': (context) =>
-            QuizGenerationScreen(onSaved: _loadAssessments),
-        '/exam-gen': (context) =>
-            ExamGenerationScreen(onSaved: _loadAssessments),
-      },
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text("Teacher Dashboard"),
-          bottom: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(icon: Icon(Icons.quiz), text: "Quizzes"),
-              Tab(icon: Icon(Icons.description), text: "Exam Papers"),
-            ],
+  Future<void> _deleteAssessment(int assessmentId, String type) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete Assessment?"),
+        content: const Text("This action cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
           ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () {
-                setState(() => _loading = true);
-                _loadAssessments();
-              },
-              tooltip: "Refresh",
-            ),
-          ],
-        ),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildQuizTab(),
-                  _buildExamTab(),
-                ],
-              ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () {
-            if (_tabController.index == 0) {
-              Navigator.pushNamed(context, '/quiz-gen');
-            } else {
-              Navigator.pushNamed(context, '/exam-gen');
-            }
-          },
-          icon: const Icon(Icons.add),
-          label: const Text("New"),
-          backgroundColor: Colors.indigo,
-          foregroundColor: Colors.white,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuizTab() {
-    if (_quizzes.isEmpty) {
-      return _buildEmptyState("No quizzes created yet.", '/quiz-gen');
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: _quizzes.length,
-      itemBuilder: (context, index) {
-        final quiz = _quizzes[index];
-        return _buildAssessmentCard(context, quiz, isQuiz: true);
-      },
-    );
-  }
-
-  Widget _buildExamTab() {
-    if (_exams.isEmpty) {
-      return _buildEmptyState("No exams created yet.", '/exam-gen');
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: _exams.length,
-      itemBuilder: (context, index) {
-        final exam = _exams[index];
-        return _buildAssessmentCard(context, exam, isQuiz: false);
-      },
-    );
-  }
-
-  Widget _buildEmptyState(String message, String route) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.quiz_outlined, size: 80, color: Colors.grey.shade300),
-          const SizedBox(height: 20),
-          Text(message,
-              style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey)),
-          const SizedBox(height: 10),
-          Text("Upload a textbook and generate your first assessment!",
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
-          const SizedBox(height: 30),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.pushNamed(context, route),
-            icon: const Icon(Icons.add),
-            label: const Text("Create Now"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.indigo,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("Delete"),
           ),
         ],
       ),
     );
+
+    if (confirmed == true && mounted) {
+      await context
+          .read<AssessmentProvider>()
+          .deleteAssessment(assessmentId, type);
+    }
   }
 
-  Widget _buildAssessmentCard(BuildContext context, ExamModel assessment,
-      {required bool isQuiz}) {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Teacher Dashboard (Member 1)"),
+        backgroundColor: Colors.indigo,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              context.read<AssessmentProvider>().loadAllAssessments();
+            },
+            tooltip: "Refresh",
+          ),
+        ],
+      ),
+      body: Consumer<AssessmentProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (provider.error != null) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text("Error: ${provider.error}"),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => provider.loadAllAssessments(),
+                    child: const Text("Retry"),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Module Cards
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ModuleCard(
+                        icon: Icons.quiz,
+                        title: "Module 1",
+                        subtitle: "Quiz Generation",
+                        color: Colors.blue,
+                        count: provider.quizzes.length,
+                        onTap: () =>
+                            Navigator.pushNamed(context, '/chapter-list'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _ModuleCard(
+                        icon: Icons.description,
+                        title: "Module 6",
+                        subtitle: "Exam Papers",
+                        color: Colors.green,
+                        count: provider.exams.length,
+                        onTap: () =>
+                            Navigator.pushNamed(context, '/chapter-list'),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // Recent Quizzes
+                _buildSection(
+                  title: "Recent Quizzes",
+                  count: provider.quizzes.length,
+                  items: provider.quizzes.take(5).toList(),
+                  type: 'quiz',
+                ),
+
+                const SizedBox(height: 24),
+
+                // Recent Exams
+                _buildSection(
+                  title: "Recent Exam Papers",
+                  count: provider.exams.length,
+                  items: provider.exams.take(5).toList(),
+                  type: 'exam',
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSection({
+    required String title,
+    required int count,
+    required List<ExamModel> items,
+    required String type,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            if (count > 0)
+              Text(
+                "$count total",
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (items.isEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(
+                      type == 'quiz'
+                          ? Icons.quiz_outlined
+                          : Icons.description_outlined,
+                      size: 48,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      "No ${type}es created yet",
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/chapter-list'),
+                      icon: const Icon(Icons.add),
+                      label: Text(
+                          "Create ${type == 'quiz' ? 'Quiz' : 'Exam Paper'}"),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          ...items.map((item) => _buildAssessmentCard(item, type)),
+      ],
+    );
+  }
+
+  Widget _buildAssessmentCard(ExamModel assessment, String type) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -200,36 +232,61 @@ class _TeacherDashboardState extends State<TeacherDashboard>
           children: [
             Row(
               children: [
+                Icon(
+                  type == 'quiz' ? Icons.quiz : Icons.description,
+                  color: type == 'quiz' ? Colors.blue : Colors.green,
+                ),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text(assessment.title,
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        assessment.title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "${assessment.difficulty} • ${_formatDate(assessment.timestamp)}",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.red),
                   onPressed: () {
                     if (assessment.id != null) {
-                      _deleteAssessment(context, assessment.id!, isQuiz);
+                      _deleteAssessment(assessment.id!, type);
                     }
                   },
-                  tooltip: "Delete",
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text("Difficulty: ${assessment.difficulty}"),
-            Text(_formatDate(assessment.timestamp),
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-            const SizedBox(height: 12),
-            _buildMarksBadge(assessment),
             const SizedBox(height: 12),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("${assessment.questions.length} Questions",
-                    style: const TextStyle(fontWeight: FontWeight.w500)),
-                Text("${assessment.timerMinutes} mins",
-                    style: TextStyle(color: Colors.grey.shade700)),
+                _buildInfoChip(
+                  icon: Icons.format_list_numbered,
+                  label: "${assessment.questions.length} Questions",
+                ),
+                const SizedBox(width: 12),
+                _buildInfoChip(
+                  icon: Icons.timer,
+                  label: "${assessment.timerMinutes} min",
+                ),
+                const SizedBox(width: 12),
+                _buildInfoChip(
+                  icon: Icons.star,
+                  label: "${assessment.totalMarks} marks",
+                  color: Colors.green,
+                ),
               ],
             ),
           ],
@@ -238,226 +295,85 @@ class _TeacherDashboardState extends State<TeacherDashboard>
     );
   }
 
-  Widget _buildMarksBadge(ExamModel assessment) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.green.shade100,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.star, color: Colors.green, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            "${assessment.totalMarks} marks",
-            style: const TextStyle(
-                fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
-          ),
-        ],
-      ),
+  Widget _buildInfoChip({
+    required IconData icon,
+    required String label,
+    Color? color,
+  }) {
+    return Chip(
+      avatar: Icon(icon, size: 16, color: color),
+      label: Text(label, style: TextStyle(fontSize: 12, color: color)),
+      backgroundColor: Colors.grey.shade100,
+      padding: EdgeInsets.zero,
     );
   }
 }
 
-/// Quiz Generation Screen
-class QuizGenerationScreen extends StatefulWidget {
-  final VoidCallback onSaved;
-  const QuizGenerationScreen({super.key, required this.onSaved});
+class _ModuleCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final int count;
+  final VoidCallback onTap;
 
-  @override
-  State<QuizGenerationScreen> createState() => _QuizGenerationScreenState();
-}
-
-class _QuizGenerationScreenState extends State<QuizGenerationScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _difficultyController = TextEditingController();
-  final _timerController = TextEditingController();
-  final _marksController = TextEditingController();
-  final _topicsController = TextEditingController();
-
-  final QuizRepository _quizRepo = QuizRepository();
-
-  Future<void> _saveQuiz() async {
-    final navigator = Navigator.of(context);
-
-    if (_formKey.currentState!.validate()) {
-      final quiz = ExamModel(
-        title: _titleController.text,
-        difficulty: _difficultyController.text,
-        timestamp: DateTime.now().toIso8601String(),
-        timerMinutes: int.parse(_timerController.text),
-        totalMarks: int.parse(_marksController.text),
-        type: "quiz",
-        questions: [],
-      );
-
-      await _quizRepo.saveQuiz(quiz);
-
-      if (!mounted) return;
-
-      widget.onSaved();
-      navigator.pop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _difficultyController.dispose();
-    _timerController.dispose();
-    _marksController.dispose();
-    _topicsController.dispose();
-    super.dispose();
-  }
+  const _ModuleCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.count,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Create Quiz")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
+    return Card(
+      elevation: 4,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(labelText: "Quiz Title"),
-                validator: (val) => val!.isEmpty ? "Enter a title" : null,
+              Icon(icon, size: 40, color: color),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
               ),
-              TextFormField(
-                controller: _difficultyController,
-                decoration: const InputDecoration(labelText: "Difficulty"),
-                validator: (val) => val!.isEmpty ? "Enter difficulty" : null,
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
               ),
-              TextFormField(
-                controller: _timerController,
-                decoration: const InputDecoration(labelText: "Timer (minutes)"),
-                keyboardType: TextInputType.number,
-                validator: (val) => val!.isEmpty ? "Enter timer" : null,
-              ),
-              TextFormField(
-                controller: _marksController,
-                decoration: const InputDecoration(labelText: "Total Marks"),
-                keyboardType: TextInputType.number,
-                validator: (val) => val!.isEmpty ? "Enter marks" : null,
-              ),
-              TextFormField(
-                controller: _topicsController,
-                decoration: const InputDecoration(
-                    labelText: "Topics (comma separated)"),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _saveQuiz,
-                icon: const Icon(Icons.save),
-                label: const Text("Save Quiz"),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Exam Generation Screen
-class ExamGenerationScreen extends StatefulWidget {
-  final VoidCallback onSaved;
-  const ExamGenerationScreen({super.key, required this.onSaved});
-
-  @override
-  State<ExamGenerationScreen> createState() => _ExamGenerationScreenState();
-}
-
-class _ExamGenerationScreenState extends State<ExamGenerationScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _difficultyController = TextEditingController();
-  final _timerController = TextEditingController();
-  final _marksController = TextEditingController();
-  final _topicsController = TextEditingController();
-
-  final ExamRepository _examRepo = ExamRepository();
-
-  Future<void> _saveExam() async {
-    final navigator = Navigator.of(context);
-
-    if (_formKey.currentState!.validate()) {
-      final exam = ExamModel(
-        title: _titleController.text,
-        difficulty: _difficultyController.text,
-        timestamp: DateTime.now().toIso8601String(),
-        timerMinutes: int.parse(_timerController.text),
-        totalMarks: int.parse(_marksController.text),
-        type: "exam",
-        questions: [],
-      );
-
-      await _examRepo.saveExam(exam);
-
-      if (!mounted) return;
-
-      widget.onSaved();
-      navigator.pop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _difficultyController.dispose();
-    _timerController.dispose();
-    _marksController.dispose();
-    _topicsController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Create Exam")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(labelText: "Exam Title"),
-                validator: (val) => val!.isEmpty ? "Enter a title" : null,
-              ),
-              TextFormField(
-                controller: _difficultyController,
-                decoration: const InputDecoration(labelText: "Difficulty"),
-                validator: (val) => val!.isEmpty ? "Enter difficulty" : null,
-              ),
-              TextFormField(
-                controller: _timerController,
-                decoration: const InputDecoration(labelText: "Timer (minutes)"),
-                keyboardType: TextInputType.number,
-                validator: (val) => val!.isEmpty ? "Enter timer" : null,
-              ),
-              TextFormField(
-                controller: _marksController,
-                decoration: const InputDecoration(labelText: "Total Marks"),
-                keyboardType: TextInputType.number,
-                validator: (val) => val!.isEmpty ? "Enter marks" : null,
-              ),
-              TextFormField(
-                controller: _topicsController,
-                decoration: const InputDecoration(
-                    labelText: "Topics (comma separated)"),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _saveExam,
-                icon: const Icon(Icons.save),
-                label: const Text("Save Exam"),
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: color.withValues(
+                      alpha:
+                          0.1), // FIXED: Use withValues instead of withOpacity
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  "$count created",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
               ),
             ],
           ),

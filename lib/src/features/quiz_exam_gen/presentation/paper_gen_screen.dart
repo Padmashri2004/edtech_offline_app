@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:logger/logger.dart';
-import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/providers/exam_provider.dart';
+import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/providers/assessment_provider.dart';
 
 class PaperGenScreen extends StatefulWidget {
   const PaperGenScreen({super.key});
@@ -27,7 +27,7 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
   }
 
   Future<void> _generateExam(
-      BuildContext context, ExamProvider examProvider) async {
+      BuildContext context, AssessmentProvider provider) async {
     // Capture ScaffoldMessenger before async gap
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     // Capture Navigator before async gap
@@ -48,7 +48,7 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       final rawContent = args?['rawContent'] ?? '';
 
-      await examProvider.generateExamWithTier(
+      await provider.generateExamWithTier(
         title: _titleController.text.trim(),
         difficulty: _selectedTier,
         topics: _topicsController.text
@@ -61,7 +61,7 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
 
       if (!mounted) return;
 
-      if (examProvider.error == null) {
+      if (provider.error == null) {
         _logger.i("✅ $_selectedTier tier exam generated successfully");
         scaffoldMessenger.showSnackBar(
           SnackBar(
@@ -70,7 +70,7 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
         navigator.pop();
       } else {
         scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text("Error: ${examProvider.error}")),
+          SnackBar(content: Text("Error: ${provider.error}")),
         );
       }
     } catch (e) {
@@ -87,6 +87,8 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<AssessmentProvider>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Question Paper Generation (Module 6)"),
@@ -153,7 +155,7 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
             ),
             const SizedBox(height: 16),
 
-            // FIXED: Tier selection using RadioGroup (modern approach)
+            // Tier selection (RadioGroup API)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -205,10 +207,7 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
               child: ElevatedButton.icon(
                 onPressed: _isGenerating
                     ? null
-                    : () => _generateExam(
-                          context,
-                          context.read<ExamProvider>(),
-                        ),
+                    : () => _generateExam(context, provider),
                 icon: _isGenerating
                     ? const SizedBox(
                         width: 20,
