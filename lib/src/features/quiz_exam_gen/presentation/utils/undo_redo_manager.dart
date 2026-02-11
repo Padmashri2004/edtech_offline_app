@@ -13,10 +13,10 @@ class UndoRedoManager {
     // Deep copy the questions list
     final stateCopy = _deepCopyQuestions(questions);
     _undoStack.add(stateCopy);
-    
+
     // Clear redo stack when new state is saved
     _redoStack.clear();
-    
+
     // Maintain max stack size
     if (_undoStack.length > maxStackSize) {
       _undoStack.removeAt(0);
@@ -26,36 +26,36 @@ class UndoRedoManager {
   /// Undo last change and return previous state
   List<QuestionModel>? undo(List<QuestionModel> currentState) {
     if (_undoStack.isEmpty) return null;
-    
+
     // Save current state to redo stack
     _redoStack.add(_deepCopyQuestions(currentState));
-    
+
     // Get previous state from undo stack
     final previousState = _undoStack.removeLast();
-    
+
     // Maintain max redo stack size
     if (_redoStack.length > maxStackSize) {
       _redoStack.removeAt(0);
     }
-    
+
     return previousState;
   }
 
   /// Redo last undone change and return next state
   List<QuestionModel>? redo(List<QuestionModel> currentState) {
     if (_redoStack.isEmpty) return null;
-    
+
     // Save current state to undo stack
     _undoStack.add(_deepCopyQuestions(currentState));
-    
+
     // Get next state from redo stack
     final nextState = _redoStack.removeLast();
-    
+
     // Maintain max undo stack size
     if (_undoStack.length > maxStackSize) {
       _undoStack.removeAt(0);
     }
-    
+
     return nextState;
   }
 
@@ -68,7 +68,6 @@ class UndoRedoManager {
   QuestionModel _copyQuestion(QuestionModel question) {
     return QuestionModel(
       id: question.id,
-      examId: question.examId,
       type: question.type,
       questionText: question.questionText,
       options: List<String>.from(question.options), // Deep copy list
@@ -111,8 +110,8 @@ class UndoRedoManager {
 
   /// Get current stack sizes (for debugging/UI display)
   Map<String, int> get stackInfo => {
-    'undoCount': _undoStack.length,
-    'redoCount': _redoStack.length,
-    'maxSize': maxStackSize,
-  };
+        'undoCount': _undoStack.length,
+        'redoCount': _redoStack.length,
+        'maxSize': maxStackSize,
+      };
 }

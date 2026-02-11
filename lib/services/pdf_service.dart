@@ -169,25 +169,26 @@ class PdfService {
   /// Parse TOC lines into chapter metadata - FIXED for multi-line format
   List<Map<String, dynamic>> _parseTocLines(List<String> lines, int total) {
     List<Map<String, dynamic>> found = [];
-    
+
     // Try multi-line TOC format first (Chapter 1 \n Title \n Page)
     for (int i = 0; i < lines.length - 2; i++) {
       String line1 = lines[i].trim();
       String line2 = lines[i + 1].trim();
       String line3 = lines[i + 2].trim();
-      
+
       // Pattern: "Chapter N" on line 1
-      RegExp chapterNumPattern = RegExp(r'^Chapter\s+(\d+)$', caseSensitive: false);
+      RegExp chapterNumPattern =
+          RegExp(r'^Chapter\s+(\d+)$', caseSensitive: false);
       var match = chapterNumPattern.firstMatch(line1);
-      
+
       if (match != null) {
         String chapterNum = match.group(1)!;
-        
+
         // Line 2 should be the title (not empty, not a number)
         if (line2.isNotEmpty && !RegExp(r'^\d+$').hasMatch(line2)) {
           // Line 3 should be the page number
           int? pageNum = int.tryParse(line3.trim());
-          
+
           if (pageNum != null && pageNum > 0 && pageNum <= total) {
             found.add({
               'chapterNumber': chapterNum,
@@ -200,10 +201,11 @@ class PdfService {
         }
       }
     }
-    
+
     // If multi-line didn't work, try single-line format
     if (found.isEmpty) {
-      final re = RegExp(r"^Chapter\s+(\d+):\s+(.+)\s+(\d+)$", caseSensitive: false);
+      final re =
+          RegExp(r"^Chapter\s+(\d+):\s+(.+)\s+(\d+)$", caseSensitive: false);
       for (String line in lines) {
         String t = line.trim();
         if (t.isEmpty || t.length > 100) continue;
@@ -224,7 +226,7 @@ class PdfService {
         }
       }
     }
-    
+
     return found;
   }
 }

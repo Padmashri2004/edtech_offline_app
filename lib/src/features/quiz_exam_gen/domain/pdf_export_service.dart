@@ -1,307 +1,332 @@
 import 'dart:io';
+import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:pdf/pdf.dart'; // FIXED: Import for PdfPageFormat and PdfColors
 import 'package:path_provider/path_provider.dart';
-import 'package:logger/logger.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
 
 class PDFExportService {
-  final Logger _logger = Logger();
-
-  /// Export exam as PDF with proper section structure
   Future<String?> exportExamToPDF(ExamModel exam) async {
     try {
       final pdf = pw.Document();
 
+      // Group questions by section
+      final sections = _groupBySection(exam.questions);
+
       pdf.addPage(
         pw.MultiPage(
-          pageFormat:
-              PdfPageFormat.a4, // FIXED: Direct import from pdf/pdf.dart
+          pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(40),
-          build: (context) => [
-            // Header
-            _buildHeader(exam),
-            pw.SizedBox(height: 20),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Center(
+                child: pw.Text(
+                  'GOVERNMENT SCHOOL EXAMINATION',
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Center(
+                child: pw.Text(
+                  exam.title,
+                  style: pw.TextStyle(
+                    fontSize: 20,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 20),
 
-            // Instructions
-            _buildInstructions(),
-            pw.SizedBox(height: 20),
+              // Student info
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Class: ${exam.metadata?['class'] ?? '___________'}'),
+                  pw.Text('Roll No: ___________'),
+                ],
+              ),
+              pw.SizedBox(height: 5),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                      'Subject: ${exam.metadata?['subject'] ?? '___________'}'),
+                  pw.Text('Date: ___________'),
+                ],
+              ),
+              pw.SizedBox(height: 5),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Total Marks: ${exam.totalMarks}'),
+                  pw.Text('Time: ${exam.timerMinutes} minutes'),
+                ],
+              ),
 
-            // Questions with Section Headers
-            ..._buildQuestionsWithSections(exam),
-          ],
+              pw.Divider(thickness: 2),
+              pw.SizedBox(height: 15),
+
+              // Instructions
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey),
+                  borderRadius:
+                      const pw.BorderRadius.all(pw.Radius.circular(5)),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'INSTRUCTIONS:',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.SizedBox(height: 5),
+                    pw.Text('• All questions are compulsory'),
+                    pw.Text('• Write answers in the space provided'),
+                    pw.Text('• Marks are indicated against each question'),
+                    pw.Text('• Read questions carefully before answering'),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Sections
+              ...sections.entries.map((entry) {
+                final sectionName = entry.key;
+                final questions = entry.value;
+                final sectionMarks = _calculateSectionMarks(questions);
+
+                return pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    // Section header
+                    pw.Container(
+                      width: double.infinity,
+                      padding: const pw.EdgeInsets.all(8),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.grey300,
+                        borderRadius:
+                            const pw.BorderRadius.all(pw.Radius.circular(5)),
+                      ),
+                      child: pw.Text(
+                        '$sectionName ($sectionMarks marks)',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+
+                    // Questions in this section
+                    ...questions.asMap().entries.map((qEntry) {
+                      int globalNumber = 1;
+                      for (var prevSection in sections.entries) {
+                        if (prevSection.key == sectionName) {
+                          globalNumber += qEntry.key;
+                          break;
+                        }
+                        globalNumber += prevSection.value.length;
+                      }
+
+                      return _buildQuestionWidget(globalNumber, qEntry.value);
+                    }),
+
+                    pw.SizedBox(height: 20),
+                  ],
+                );
+              }),
+            ];
+          },
         ),
       );
 
       // Save PDF
-      final dir = await getApplicationDocumentsDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = "${exam.title.replaceAll(' ', '_')}_$timestamp.pdf";
-      final filePath = "${dir.path}/$fileName";
-      final file = File(filePath);
+      final output = await getApplicationDocumentsDirectory();
+      final file = File(
+          '${output.path}/exam_${DateTime.now().millisecondsSinceEpoch}.pdf');
       await file.writeAsBytes(await pdf.save());
 
-      _logger.i("✅ Exam exported to PDF: $filePath");
-      return filePath;
+      return file.path;
     } catch (e) {
-      _logger.e("❌ Failed to export exam to PDF: $e");
+      // print('Error exporting PDF: $e');
       return null;
     }
   }
 
-  /// Build exam header
-  pw.Widget _buildHeader(ExamModel exam) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Center(
-          child: pw.Text(
-            "GOVERNMENT SCHOOL EXAMINATION",
-            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-          ),
-        ),
-        pw.SizedBox(height: 10),
-        pw.Center(
-          child: pw.Text(
-            exam.title,
-            style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-          ),
-        ),
-        pw.SizedBox(height: 15),
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Text("Class: ____________",
-                style: const pw.TextStyle(fontSize: 12)),
-            pw.Text("Roll No: ____________",
-                style: const pw.TextStyle(fontSize: 12)),
-          ],
-        ),
-        pw.SizedBox(height: 5),
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Text("Subject: ____________",
-                style: const pw.TextStyle(fontSize: 12)),
-            pw.Text("Date: ____________",
-                style: const pw.TextStyle(fontSize: 12)),
-          ],
-        ),
-        pw.SizedBox(height: 5),
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Text("Total Marks: ${exam.totalMarks}",
-                style:
-                    pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-            pw.Text("Time: ${exam.timerMinutes} minutes",
-                style:
-                    pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-          ],
-        ),
-        pw.Divider(thickness: 2),
-      ],
-    );
-  }
+  Map<String, List<QuestionModel>> _groupBySection(
+      List<QuestionModel> questions) {
+    final Map<String, List<QuestionModel>> sections = {
+      'Section A': [],
+      'Section B': [],
+      'Section C': [],
+      'Section D': [],
+    };
 
-  /// Build exam instructions
-  pw.Widget _buildInstructions() {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(10),
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(width: 1),
-      ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            "INSTRUCTIONS:",
-            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 5),
-          _buildBulletPoint("All questions are compulsory."),
-          _buildBulletPoint(
-              "Write your answers in neat and clean handwriting."),
-          _buildBulletPoint("Use blue or black pen only."),
-          _buildBulletPoint(
-              "Calculator use is not permitted unless specified."),
-        ],
-      ),
-    );
-  }
-
-  /// Build bullet point for instructions
-  pw.Widget _buildBulletPoint(String text) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(left: 10, bottom: 3),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text("• ", style: const pw.TextStyle(fontSize: 11)),
-          pw.Expanded(
-            child: pw.Text(text, style: const pw.TextStyle(fontSize: 11)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Build questions with proper section headers
-  List<pw.Widget> _buildQuestionsWithSections(ExamModel exam) {
-    List<pw.Widget> widgets = [];
-
-    // Group questions by section based on tier
-    Map<String, List<QuestionModel>> sections = _groupQuestionsBySections(exam);
-
-    int questionNumber = 1;
-
-    sections.forEach((sectionName, questions) {
-      // Section Header
-      widgets.add(_buildSectionHeader(sectionName, exam.difficulty));
-      widgets.add(pw.SizedBox(height: 10));
-
-      // Questions in this section
-      for (var q in questions) {
-        widgets.add(_buildQuestion(questionNumber, q));
-        widgets.add(pw.SizedBox(height: 15));
-        questionNumber++;
-      }
-
-      widgets.add(pw.SizedBox(height: 10));
-    });
-
-    return widgets;
-  }
-
-  /// Group questions into sections based on tier structure
-  Map<String, List<QuestionModel>> _groupQuestionsBySections(ExamModel exam) {
-    Map<String, List<QuestionModel>> sections = {};
-
-    if (exam.difficulty == "Basic") {
-      // Basic Tier: Section A (20) + B (15) + C (35) + D (30)
-      sections["Section A (20 marks)"] = [];
-      sections["Section B (15 marks)"] = [];
-      sections["Section C (35 marks)"] = [];
-      sections["Section D (30 marks)"] = [];
-
-      for (var q in exam.questions) {
-        if (q.type == 'MCQ' ||
-            q.type == 'Fill-up' ||
-            q.type == 'OddOneOut' ||
-            q.type == 'Rearrange') {
-          sections["Section A (20 marks)"]!.add(q);
-        } else if (q.type == 'MatchIt') {
-          sections["Section B (15 marks)"]!.add(q);
-        } else if (q.type == 'ShortAns') {
-          sections["Section C (35 marks)"]!.add(q);
-        } else if (q.type == 'LongAns') {
-          sections["Section D (30 marks)"]!.add(q);
-        }
-      }
-    } else {
-      // Advanced Tier: Section A (20) + B (25) + C (5) + D (50)
-      sections["Section A (20 marks)"] = [];
-      sections["Section B (25 marks)"] = [];
-      sections["Section C (5 marks)"] = [];
-      sections["Section D (50 marks)"] = [];
-
-      for (var q in exam.questions) {
-        if (q.type == 'MCQ' ||
-            q.type == 'Fill-up' ||
-            q.type == 'True/False' ||
-            q.type == 'OddOneOut') {
-          sections["Section A (20 marks)"]!.add(q);
-        } else if (q.type == 'ShortAns') {
-          sections["Section B (25 marks)"]!.add(q);
-        } else if (q.type == 'CaseStudy') {
-          sections["Section C (5 marks)"]!.add(q);
-        } else if (q.type == 'LongAns') {
-          sections["Section D (50 marks)"]!.add(q);
-        }
+    for (var question in questions) {
+      if (question.type == 'MCQ' ||
+          question.type == 'Fill-up' ||
+          question.type == 'True/False' ||
+          question.type == 'OddOneOut') {
+        sections['Section A']!.add(question);
+      } else if (question.type == 'Match' || question.type == 'MatchIt') {
+        sections['Section B']!.add(question);
+      } else if (question.type == 'ShortAns') {
+        sections['Section C']!.add(question);
+      } else if (question.type == 'LongAns' || question.type == 'CaseStudy') {
+        sections['Section D']!.add(question);
       }
     }
 
-    // Remove empty sections
     sections.removeWhere((key, value) => value.isEmpty);
-
     return sections;
   }
 
-  /// Build section header
-  pw.Widget _buildSectionHeader(String sectionName, String tier) {
+  int _calculateSectionMarks(List<QuestionModel> questions) {
+    return questions.fold(0, (sum, q) => sum + q.marks);
+  }
+
+  pw.Widget _buildQuestionWidget(int number, QuestionModel question) {
     return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-      decoration: pw.BoxDecoration(
-        color: PdfColors.grey300, // FIXED: Direct import from pdf/pdf.dart
-        border: pw.Border.all(width: 1),
-      ),
-      child: pw.Text(
-        sectionName,
-        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+      margin: const pw.EdgeInsets.only(bottom: 15),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          // Question text with marks
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.RichText(
+                  text: pw.TextSpan(
+                    style: const pw.TextStyle(fontSize: 12),
+                    children: [
+                      pw.TextSpan(
+                        text: '$number. ',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                      pw.TextSpan(text: question.questionText),
+                    ],
+                  ),
+                ),
+              ),
+              pw.SizedBox(width: 10),
+              pw.Container(
+                padding:
+                    const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey),
+                  borderRadius:
+                      const pw.BorderRadius.all(pw.Radius.circular(3)),
+                ),
+                child: pw.Text(
+                  '[${question.marks} ${question.marks == 1 ? "mark" : "marks"}]',
+                  style: const pw.TextStyle(fontSize: 10),
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 8),
+
+          // ✅ NEW: Image if attached (for exam papers)
+          if (question.imagePath != null) ...[
+            _buildImageWidget(question.imagePath!),
+            pw.SizedBox(height: 8),
+          ],
+
+          // Options for MCQ/True-False
+          if (question.options.isNotEmpty &&
+              (question.type == 'MCQ' ||
+                  question.type == 'True/False' ||
+                  question.type == 'OddOneOut')) ...[
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(left: 20),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: question.options.asMap().entries.map((entry) {
+                  final letter = String.fromCharCode(97 + entry.key);
+                  return pw.Padding(
+                    padding: const pw.EdgeInsets.only(bottom: 3),
+                    child: pw.Text('($letter) ${entry.value}'),
+                  );
+                }).toList(),
+              ),
+            ),
+            pw.SizedBox(height: 5),
+          ],
+
+          // Answer space
+          if (question.type == 'Fill-up' ||
+              question.type == 'ShortAns' ||
+              question.type == 'LongAns' ||
+              question.type == 'CaseStudy') ...[
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(left: 20),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Answer:',
+                    style: const pw.TextStyle(
+                        fontSize: 10, color: PdfColors.grey700),
+                  ),
+                  pw.SizedBox(height: 3),
+                  ...List.generate(
+                    question.type == 'LongAns' || question.type == 'CaseStudy'
+                        ? 8
+                        : 3,
+                    (i) => pw.Text(
+                      '_' * 80,
+                      style: const pw.TextStyle(fontSize: 8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
-  /// Build individual question
-  pw.Widget _buildQuestion(int number, QuestionModel q) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        // Question text with marks
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Expanded(
-              child: pw.Text(
-                "$number. ${q.questionText}",
-                style:
-                    pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-              ),
-            ),
-            pw.Text(
-              "[${q.marks} marks]",
-              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-            ),
-          ],
-        ),
-        pw.SizedBox(height: 5),
+  // ✅ NEW: Build image widget for PDF
+  pw.Widget _buildImageWidget(String imagePath) {
+    try {
+      final imageFile = File(imagePath);
+      if (imageFile.existsSync()) {
+        final imageBytes = imageFile.readAsBytesSync();
+        final image = pw.MemoryImage(imageBytes);
 
-        // Options for MCQ/True-False/OddOneOut
-        if (q.options.isNotEmpty &&
-            (q.type == 'MCQ' ||
-                q.type == 'True/False' ||
-                q.type == 'OddOneOut'))
-          ...q.options.asMap().entries.map((entry) {
-            final optionLetter =
-                String.fromCharCode(97 + entry.key); // a, b, c, d
-            return pw.Padding(
-              padding: const pw.EdgeInsets.only(left: 20, bottom: 3),
-              child: pw.Text(
-                "($optionLetter) ${entry.value}",
-                style: const pw.TextStyle(fontSize: 11),
-              ),
-            );
-          }),
-
-        // Answer space for Fill-up/Short/Long answers
-        if (q.type == 'Fill-up' || q.type == 'ShortAns' || q.type == 'LongAns')
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(left: 20, top: 5),
-            child: pw.Column(
-              children: [
-                pw.Container(
-                  height: q.type == 'LongAns' ? 80 : 40,
-                  decoration: const pw.BoxDecoration(
-                    border: pw.Border(
-                      bottom: pw.BorderSide(
-                          width: 0.5, style: pw.BorderStyle.dashed),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+        return pw.Container(
+          margin: const pw.EdgeInsets.only(left: 20, top: 5, bottom: 5),
+          padding: const pw.EdgeInsets.all(8),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.grey),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
           ),
-      ],
-    );
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Image(image, height: 150, fit: pw.BoxFit.contain),
+              pw.SizedBox(height: 5),
+              pw.Text(
+                '[Refer to the diagram above]',
+                style:
+                    const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      // print('Error adding image to PDF: $e');
+    }
+
+    return pw.SizedBox.shrink();
   }
 }

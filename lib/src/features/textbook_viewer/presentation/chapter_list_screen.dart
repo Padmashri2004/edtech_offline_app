@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:edtech_offline_app/services/pdf_service.dart';
+import 'package:edtech_offline_app/services/image_extraction_service.dart';
 
 class ChapterListScreen extends StatefulWidget {
-  const ChapterListScreen({super.key});
+  final Map<String, String>? metadata;
+
+  const ChapterListScreen({super.key, this.metadata});
 
   @override
   State<ChapterListScreen> createState() => _ChapterListScreenState();
@@ -11,68 +14,34 @@ class ChapterListScreen extends StatefulWidget {
 
 class _ChapterListScreenState extends State<ChapterListScreen> {
   final PdfService _pdfService = PdfService();
+  final ImageExtractionService _imageService = ImageExtractionService();
+
   File? _selectedFile;
   List<Map<String, dynamic>> _chapters = [];
+  List<Map<String, dynamic>> _extractedImages = [];
   bool _isLoading = false;
   final Set<int> _checkedChaptersIndices = {};
   bool _selectAll = false;
-
-  // ✅ Progress tracking
-  double extractionProgress = 0.0;
-  bool _isExtracting = false;
-  String? _currentChapterTitle; // show which chapter is being processed
+  bool _tocDetected = false;
 
   Future<void> _handlePickFile() async {
     setState(() => _isLoading = true);
     final file = await _pdfService.pickTextbook();
+
     if (file != null) {
-      final scannedChapters = await _pdfService.getChapters(file);
+      final chapters = await _pdfService.getChapters(file);
+
       setState(() {
         _selectedFile = file;
-        _chapters = scannedChapters;
+        _chapters = chapters;
+        _tocDetected = chapters.isNotEmpty; // simple heuristic
         _isLoading = false;
         _checkedChaptersIndices.clear();
-        extractionProgress = 0.0;
         _selectAll = false;
-        _currentChapterTitle = null;
       });
     } else {
       setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _extractSelectedChapters() async {
-    if (_checkedChaptersIndices.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select at least one chapter.")),
-      );
-      return;
-    }
-
-    setState(() {
-      _isExtracting = true;
-      extractionProgress = 0.0;
-      _currentChapterTitle = null;
-    });
-
-    int total = _checkedChaptersIndices.length;
-    int processed = 0;
-
-    // ✅ Use index to show which chapter is being processed
-    for (int index in _checkedChaptersIndices) {
-      final chapter = _chapters[index];
-      _currentChapterTitle = chapter['title'];
-      await Future.delayed(const Duration(milliseconds: 400)); // simulate work
-      processed++;
-      setState(() {
-        extractionProgress = processed / total;
-      });
-    }
-
-    setState(() {
-      _isExtracting = false;
-      _currentChapterTitle = null;
-    });
   }
 
   void _toggleSelectAll(bool? value) {
@@ -87,7 +56,36 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
     });
   }
 
-  // FIXED: Extract chapter text and pass to navigation
+  Future<void> _extractImagesFromSelectedChapters() async {
+    if (_selectedFile == null || _checkedChaptersIndices.isEmpty) return;
+
+    setState(() => _isLoading = true);
+    _extractedImages.clear();
+
+    for (int index in _checkedChaptersIndices) {
+      final chapter = _chapters[index];
+
+      final images = await _imageService.extractImagesWithCaptions(
+        _selectedFile!,
+        chapter['startPage'],
+        chapter['endPage'],
+      );
+
+      _extractedImages.addAll(images);
+    }
+
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
+    if (_extractedImages.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('✅ Extracted ${_extractedImages.length} images')),
+      );
+    }
+  }
+
   Future<void> _navigateToModule(String routeName) async {
     if (_checkedChaptersIndices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -95,16 +93,16 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
       );
       return;
     }
-
     if (_selectedFile == null) return;
 
-    // Extract text from first selected chapter
+    if (_extractedImages.isEmpty) {
+      await _extractImagesFromSelectedChapters();
+    }
+
     final firstIndex = _checkedChaptersIndices.first;
     final chapter = _chapters[firstIndex];
-
     setState(() => _isLoading = true);
 
-    // Extract chapter content
     final rawContent = await _pdfService.extractChapterText(
       _selectedFile!,
       chapter['startPage'],
@@ -120,16 +118,58 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
       'chapter': chapter,
       'rawContent': rawContent,
       'selection': _checkedChaptersIndices.toList(),
+      'metadata': widget.metadata,
+      'extractedImages': _extractedImages,
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Select Content")),
+      appBar: AppBar(
+        title: const Text("Select Content"),
+        backgroundColor: Colors.indigo,
+        foregroundColor: Colors.white,
+      ),
       body: Column(
         children: [
-          // Upload Button
+          if (widget.metadata != null)
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.blue),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${widget.metadata!['class']} • ${widget.metadata!['subject']}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          widget.metadata!['textbookName'] ?? '',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: SizedBox(
@@ -139,13 +179,48 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
                 icon: const Icon(Icons.upload_file),
                 label: Text(
                     _selectedFile == null ? "Upload Textbook" : "Change Book"),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
               ),
             ),
           ),
-
           if (_isLoading) const LinearProgressIndicator(),
-
-          // Header with Select All
+          if (_chapters.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color:
+                    _tocDetected ? Colors.green.shade50 : Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _tocDetected ? Colors.green : Colors.orange,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _tocDetected ? Icons.check_circle : Icons.warning,
+                    color: _tocDetected ? Colors.green : Colors.orange,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _tocDetected
+                          ? '✓ Chapters detected'
+                          : '⚠ Using fallback chapter detection',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: _tocDetected
+                            ? Colors.green.shade900
+                            : Colors.orange.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (_chapters.isNotEmpty)
             Container(
               color: Colors.indigo.shade50,
@@ -156,38 +231,19 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
                     value: _selectAll,
                     onChanged: _toggleSelectAll,
                   ),
-                  const Text("Select All / Deselect All"),
+                  const Text("Select All"),
                   const Spacer(),
-                  ElevatedButton(
-                    onPressed: _isExtracting ? null : _extractSelectedChapters,
-                    child: _isExtracting
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text("Extract Chapters"),
+                  ElevatedButton.icon(
+                    onPressed:
+                        _isLoading ? null : _extractImagesFromSelectedChapters,
+                    icon: const Icon(Icons.image),
+                    label: Text(_extractedImages.isEmpty
+                        ? 'Extract Images'
+                        : '${_extractedImages.length} Images'),
                   ),
                 ],
               ),
             ),
-
-          // Progress bar for extraction
-          if (_isExtracting || extractionProgress > 0)
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                children: [
-                  LinearProgressIndicator(value: extractionProgress),
-                  if (_currentChapterTitle != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text("Processing: $_currentChapterTitle"),
-                    ),
-                ],
-              ),
-            ),
-
-          // Chapter List
           Expanded(
             child: _chapters.isEmpty
                 ? const Center(child: Text("Upload a textbook to begin."))
@@ -220,8 +276,6 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
                     },
                   ),
           ),
-
-          // Action Buttons
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -242,7 +296,7 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
                         ? () => _navigateToModule('/paper-gen')
                         : null,
                     icon: const Icon(Icons.description),
-                    label: const Text("Mod 6: Exam Paper"),
+                    label: const Text("Mod 6: Exam"),
                   ),
                 ),
               ],

@@ -1,13 +1,11 @@
+import 'dart:io';
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:edtech_offline_app/src/core/ai/ai_service.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
 
 class QuizPlayScreen extends StatefulWidget {
   final ExamModel exam;
+
   const QuizPlayScreen({super.key, required this.exam});
 
   @override
@@ -16,18 +14,30 @@ class QuizPlayScreen extends StatefulWidget {
 
 class _QuizPlayScreenState extends State<QuizPlayScreen> {
   int _currentQuestionIndex = 0;
-  Map<int, String> _userAnswers = {};
+  final Map<int, String> _answers = {};
   Timer? _timer;
   int _remainingSeconds = 0;
-  bool _isSubmitted = false;
-  int _score = 0;
-  bool _isExplaining = false;
-  bool _isLoadingState = true;
+  bool _showExplanations = false;
 
   @override
   void initState() {
     super.initState();
-    _restoreState();
+    _remainingSeconds = widget.exam.timerMinutes * 60;
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        if (_remainingSeconds > 0) {
+          _remainingSeconds--;
+        } else {
+          _timer?.cancel();
+          _submitQuiz();
+        }
+      });
+    });
   }
 
   @override
@@ -36,486 +46,199 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
     super.dispose();
   }
 
-  Future<void> _restoreState() async {
-    final prefs = await SharedPreferences.getInstance();
-    final examId = widget.exam.id ?? 0;
-
-    String? savedAnswers = prefs.getString('quiz_answers_$examId');
-    if (savedAnswers != null) {
-      try {
-        Map<String, dynamic> decoded = jsonDecode(savedAnswers);
-        if (!mounted) return;
-        setState(() {
-          _userAnswers =
-              decoded.map((k, v) => MapEntry(int.parse(k), v.toString()));
-        });
-      } catch (e) {
-        debugPrint("Error parsing saved answers: $e");
-      }
-    }
-
-    int? targetEpoch = prefs.getInt('quiz_deadline_$examId');
-    if (targetEpoch != null) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final diff = (targetEpoch - now) ~/ 1000;
-      _remainingSeconds = diff > 0 ? diff : 0;
-    } else {
-      _remainingSeconds =
-          (widget.exam.timerMinutes > 0 ? widget.exam.timerMinutes : 30) * 60;
-      int newTarget =
-          DateTime.now().millisecondsSinceEpoch + (_remainingSeconds * 1000);
-      await prefs.setInt('quiz_deadline_$examId', newTarget);
-    }
-
-    if (!mounted) return;
-    setState(() => _isLoadingState = false);
-
-    if (_remainingSeconds > 0) {
-      _startTimer();
-    } else {
-      _submitQuiz();
-    }
-  }
-
-  Future<void> _saveAnswerLocally(int index, String answer) async {
-    setState(() => _userAnswers[index] = answer);
-
-    final prefs = await SharedPreferences.getInstance();
-    final examId = widget.exam.id ?? 0;
-
-    Map<String, String> exportMap =
-        _userAnswers.map((k, v) => MapEntry(k.toString(), v));
-    await prefs.setString('quiz_answers_$examId', jsonEncode(exportMap));
-  }
-
-  Future<void> _clearLocalData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final examId = widget.exam.id ?? 0;
-    await prefs.remove('quiz_answers_$examId');
-    await prefs.remove('quiz_deadline_$examId');
-  }
-
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingSeconds > 0) {
-        if (mounted) {
-          setState(() => _remainingSeconds--);
-        }
-      } else {
-        _submitQuiz();
-      }
+  void _selectAnswer(String answer) {
+    setState(() {
+      _answers[_currentQuestionIndex] = answer;
     });
+  }
+
+  void _nextQuestion() {
+    if (_currentQuestionIndex < widget.exam.questions.length - 1) {
+      setState(() => _currentQuestionIndex++);
+    }
+  }
+
+  void _previousQuestion() {
+    if (_currentQuestionIndex > 0) {
+      setState(() => _currentQuestionIndex--);
+    }
   }
 
   void _submitQuiz() {
     _timer?.cancel();
-    _clearLocalData();
 
-    int correctCount = 0;
+    int score = 0;
     for (int i = 0; i < widget.exam.questions.length; i++) {
-      String userAns = _userAnswers[i]?.trim().toLowerCase() ?? "";
-      String correctAns =
-          widget.exam.questions[i].correctAnswer.trim().toLowerCase();
-      if (userAns == correctAns) {
-        correctCount++;
+      final q = widget.exam.questions[i];
+      final userAnswer = _answers[i];
+      if (userAnswer != null &&
+          userAnswer.toLowerCase() == q.correctAnswer.toLowerCase()) {
+        score += q.marks;
       }
     }
 
-    if (!mounted) return;
-    setState(() {
-      _isSubmitted = true;
-      _score = correctCount;
-    });
-  }
-
-  Future<void> _explainMistake(QuestionModel question, String userAns) async {
-    setState(() => _isExplaining = true);
-    final aiService = context.read<AIService>();
-
-    try {
-      String actualUserAns = userAns.isEmpty ? "No Answer" : userAns;
-      String explanation = await aiService.explainMistake(
-        question: question.questionText,
-        studentAns: actualUserAns,
-        correctAns: question.correctAnswer,
-      );
-
-      if (!mounted) return;
-      _showExplanationDialog(explanation);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("AI Error: $e")));
-    } finally {
-      if (mounted) {
-        setState(() => _isExplaining = false);
-      }
-    }
-  }
-
-  void _showExplanationDialog(String text) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text("AI Explanation"),
-        content: SingleChildScrollView(child: Text(text)),
+        title: const Text('Quiz Complete!'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.check_circle, color: Colors.green, size: 64),
+            const SizedBox(height: 16),
+            Text(
+              'Your Score: $score / ${widget.exam.totalMarks}',
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Close"),
-          )
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                _showExplanations = true;
+                _currentQuestionIndex = 0;
+              });
+            },
+            icon: const Icon(Icons.lightbulb_outline),
+            label: const Text('View Explanations'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+            },
+            child: const Text('Exit Quiz'),
+          ),
         ],
       ),
     );
   }
 
-  List<String> _parseOptions(dynamic options) {
-    if (options is List) {
-      return options.map((e) => e.toString()).toList();
-    }
-    if (options is String && options.isNotEmpty) {
-      return options
-          .replaceAll('[', '')
-          .replaceAll(']', '')
-          .replaceAll('"', '')
-          .split(',')
-          .map((e) => e.trim())
-          .toList();
-    }
-    return [];
-  }
-
   String _formatTime(int seconds) {
-    int m = seconds ~/ 60;
-    int s = seconds % 60;
-    return "${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}";
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoadingState) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_isSubmitted) {
-      return _buildResultScreen();
-    }
-
     final question = widget.exam.questions[_currentQuestionIndex];
-    final options = _parseOptions(question.options);
+    final selectedAnswer = _answers[_currentQuestionIndex];
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.exam.title, style: const TextStyle(fontSize: 16)),
+        title: Text(widget.exam.title),
         actions: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            margin: const EdgeInsets.only(right: 16),
-            decoration: BoxDecoration(
-              color: _remainingSeconds < 60
-                  ? Colors.red.shade100
-                  : Colors.indigo.shade50,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: _remainingSeconds < 60 ? Colors.red : Colors.indigo,
-              ),
-            ),
+          Padding(
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const Icon(Icons.timer, size: 16, color: Colors.black87),
-                const SizedBox(width: 4),
-                Text(
-                  _formatTime(_remainingSeconds),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: _remainingSeconds < 60 ? Colors.red : Colors.indigo,
-                  ),
-                ),
+                const Icon(Icons.timer),
+                const SizedBox(width: 8),
+                Text(_formatTime(_remainingSeconds)),
               ],
             ),
-          )
+          ),
         ],
       ),
       body: Column(
         children: [
           LinearProgressIndicator(
             value: (_currentQuestionIndex + 1) / widget.exam.questions.length,
-            backgroundColor: Colors.grey.shade200,
-            color: Colors.indigo,
-            minHeight: 6,
           ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Question ${_currentQuestionIndex + 1}/${widget.exam.questions.length}",
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
                     question.questionText,
                     style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                    ),
+                        fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 24),
-
-                  // Options or TextField
-                  if (options.isNotEmpty)
-                    ...List.generate(options.length, (index) {
-                      String optLabel =
-                          String.fromCharCode(65 + index); // A, B, C...
-                      bool isSelected =
-                          _userAnswers[_currentQuestionIndex] == optLabel;
-                      return _buildOptionCard(
-                        optLabel,
-                        options[index],
-                        isSelected,
-                        _currentQuestionIndex,
-                      );
-                    })
-                  else
-                    TextField(
-                      controller: TextEditingController(
-                        text: _userAnswers[_currentQuestionIndex],
+                  const SizedBox(height: 16),
+                  if (question.imagePath != null) ...[
+                    Image.file(File(question.imagePath!)),
+                    const SizedBox(height: 16),
+                  ],
+                  if (question.options.isNotEmpty) ...[
+                    IgnorePointer(
+                      ignoring: _showExplanations, // ✅ disable when reviewing
+                      child: RadioGroup<String>(
+                        groupValue: selectedAnswer,
+                        onChanged: (value) {
+                          if (value != null) _selectAnswer(value);
+                        },
+                        child: Column(
+                          children: question.options.map((opt) {
+                            return RadioListTile.adaptive(
+                              title: Text(opt),
+                              value: opt,
+                            );
+                          }).toList(),
+                        ),
                       ),
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        labelText: "Type your answer here...",
-                        alignLabelWithHint: true,
-                      ),
-                      maxLines: 3,
-                      onChanged: (val) =>
-                          _saveAnswerLocally(_currentQuestionIndex, val),
                     ),
+                  ],
+                  if (_showExplanations && question.explanation.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      color: Colors.orange.shade50,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("AI Explanation",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 18)),
+                          const SizedBox(height: 8),
+                          Text(question.explanation),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Correct Answer: ${question.correctAnswer}",
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
-        ],
-      ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            OutlinedButton(
-              onPressed: _currentQuestionIndex > 0
-                  ? () => setState(() => _currentQuestionIndex--)
-                  : null,
-              child: const Text("Previous"),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (_currentQuestionIndex < widget.exam.questions.length - 1) {
-                  setState(() => _currentQuestionIndex++);
-                } else {
-                  _showSubmitDialog();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    _currentQuestionIndex == widget.exam.questions.length - 1
-                        ? Colors.green
-                        : Colors.indigo,
-                foregroundColor: Colors.white,
-              ),
-              child: Text(
-                _currentQuestionIndex == widget.exam.questions.length - 1
-                    ? "Finish"
-                    : "Next",
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- Widget: Option Card ---
-  Widget _buildOptionCard(
-      String label, String text, bool isSelected, int qIndex) {
-    return Card(
-      color: isSelected ? Colors.indigo.shade50 : Colors.white,
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        side: BorderSide(
-          color: isSelected ? Colors.indigo : Colors.grey.shade300,
-        ),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: InkWell(
-        onTap: () => _saveAnswerLocally(qIndex, label),
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Icon(
-                isSelected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: isSelected ? Colors.indigo : Colors.grey,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  "$label) $text",
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: isSelected ? Colors.indigo.shade900 : Colors.black87,
-                    fontWeight:
-                        isSelected ? FontWeight.w500 : FontWeight.normal,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --- Widget: Result Screen ---
-  Widget _buildResultScreen() {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Quiz Results"),
-        automaticallyImplyLeading: false,
-      ),
-      body: _isExplaining
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 20),
-                  Text("AI is analyzing your mistake..."),
-                ],
-              ),
-            )
-          : Column(
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    children: [
-                      Text(
-                        "You scored $_score / ${widget.exam.questions.length}",
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        "Tap on incorrect questions to ask AI for an explanation.",
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: widget.exam.questions.length,
-                    itemBuilder: (ctx, index) {
-                      final question = widget.exam.questions[index];
-                      final userAns =
-                          _userAnswers[index]?.trim().toLowerCase() ?? "";
-                      final correctAns =
-                          question.correctAnswer.trim().toLowerCase();
-                      final isCorrect = userAns == correctAns;
-
-                      return Card(
-                        color: isCorrect
-                            ? Colors.green.shade50
-                            : Colors.red.shade50,
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        child: ListTile(
-                          leading: Icon(
-                            isCorrect ? Icons.check_circle : Icons.cancel,
-                            color: isCorrect ? Colors.green : Colors.red,
-                          ),
-                          title: Text(
-                            question.questionText,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                  "Your Answer: ${_userAnswers[index] ?? 'None'}"),
-                              Text(
-                                "Correct: ${question.correctAnswer}",
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                          trailing: !isCorrect
-                              ? IconButton(
-                                  icon: const Icon(Icons.psychology,
-                                      color: Colors.indigo),
-                                  tooltip: "Explain Mistake",
-                                  onPressed: () => _explainMistake(
-                                    question,
-                                    _userAnswers[index] ?? "",
-                                  ),
-                                )
-                              : null,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.of(context)
-                          .popUntil((route) => route.isFirst),
-                      child: const Text("Back to Dashboard"),
+                if (_currentQuestionIndex > 0)
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _previousQuestion,
+                      child: const Text("Previous"),
                     ),
                   ),
-                )
+                if (_currentQuestionIndex > 0) const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _currentQuestionIndex ==
+                            widget.exam.questions.length - 1
+                        ? (_showExplanations ? null : _submitQuiz)
+                        : _nextQuestion,
+                    child: Text(
+                      _currentQuestionIndex == widget.exam.questions.length - 1
+                          ? "Submit"
+                          : "Next",
+                    ),
+                  ),
+                ),
               ],
             ),
-    );
-  }
-
-  void _showSubmitDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Submit Quiz?"),
-        content: const Text(
-            "Are you sure you want to finish? You cannot change answers after submitting."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _submitQuiz();
-            },
-            child: const Text("Submit"),
           ),
         ],
       ),

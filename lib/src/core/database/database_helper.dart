@@ -10,7 +10,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('edtech_offline_v7.db');
+    _database = await _initDB('edtech_offline.db');
     return _database!;
   }
 
@@ -18,31 +18,38 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    debugPrint(" 📂 DB Path: $path");
+    debugPrint("📂 DB Path: $path");
 
     return await openDatabase(
       path,
-      version: 8, // bump version since schema changed
+      version: 1,
       onCreate: _createDB,
-      onUpgrade: _upgradeDB,
     );
   }
 
   Future _createDB(Database db, int version) async {
-    // Exams table (used for both quizzes and exams)
+    // =========================
+    // Exams table
+    // =========================
     await db.execute('''
       CREATE TABLE exams (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
+        type TEXT NOT NULL,                -- "quiz" or "exam"
         difficulty TEXT NOT NULL,
         timestamp TEXT NOT NULL,
-        timer_minutes INTEGER NOT NULL,     -- ✅ teacher must provide timer
-        total_marks INTEGER NOT NULL,       -- ✅ teacher must provide marks
-        type TEXT NOT NULL                  -- "quiz" or "exam"
+        timer_minutes INTEGER NOT NULL,
+        total_marks INTEGER NOT NULL,
+        published INTEGER NOT NULL DEFAULT 0,
+        class_name TEXT,
+        subject TEXT,
+        textbook_name TEXT
       )
     ''');
 
+    // =========================
     // Questions table
+    // =========================
     await db.execute('''
       CREATE TABLE questions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,7 +65,9 @@ class DatabaseHelper {
       )
     ''');
 
-    // Question history (to avoid regenerating duplicates)
+    // =========================
+    // Question history table
+    // =========================
     await db.execute('''
       CREATE TABLE question_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,19 +77,5 @@ class DatabaseHelper {
         generated_at TEXT
       )
     ''');
-  }
-
-  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 8) {
-      // Ensure required columns exist
-      await db.execute(
-          'ALTER TABLE exams ADD COLUMN type TEXT NOT NULL DEFAULT "quiz"');
-      await db.execute(
-          'ALTER TABLE exams ADD COLUMN timer_minutes INTEGER NOT NULL DEFAULT 30');
-      await db.execute(
-          'ALTER TABLE exams ADD COLUMN total_marks INTEGER NOT NULL DEFAULT 0');
-      await db.execute(
-          'ALTER TABLE questions ADD COLUMN type TEXT NOT NULL DEFAULT "MCQ"');
-    }
   }
 }

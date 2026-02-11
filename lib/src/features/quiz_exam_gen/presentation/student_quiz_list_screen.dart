@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/presentation/providers/assessment_provider.dart';
 
 class StudentQuizListScreen extends StatefulWidget {
@@ -72,9 +71,11 @@ class _StudentQuizListScreenState extends State<StudentQuizListScreen> {
             );
           }
 
-          final quizzes = provider.quizzes;
+          // ✅ FILTER: Show only published quizzes to students
+          final publishedQuizzes =
+              provider.quizzes.where((quiz) => quiz.published == true).toList();
 
-          if (quizzes.isEmpty) {
+          if (publishedQuizzes.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -83,17 +84,13 @@ class _StudentQuizListScreenState extends State<StudentQuizListScreen> {
                       size: 80, color: Colors.grey.shade300),
                   const SizedBox(height: 20),
                   const Text(
-                    "No quizzes available",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
+                    "No quizzes available yet",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   Text(
-                    "Ask your teacher to create quizzes",
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    "Your teacher will publish quizzes soon",
+                    style: TextStyle(color: Colors.grey.shade600),
                   ),
                 ],
               ),
@@ -102,116 +99,122 @@ class _StudentQuizListScreenState extends State<StudentQuizListScreen> {
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: quizzes.length,
+            itemCount: publishedQuizzes.length,
             itemBuilder: (context, index) {
-              final quiz = quizzes[index];
-              return _buildQuizCard(context, quiz);
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildQuizCard(BuildContext context, ExamModel quiz) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () {
-          Navigator.pushNamed(
-            context,
-            '/quiz-play',
-            arguments: quiz,
-          );
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title and difficulty
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      quiz.title,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  _buildDifficultyBadge(quiz.difficulty),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Date
-              Row(
-                children: [
-                  const Icon(Icons.calendar_today,
-                      size: 16, color: Colors.grey),
-                  const SizedBox(width: 8),
-                  Text(
-                    _formatDate(quiz.timestamp),
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Stats
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildStatChip(
-                    icon: Icons.format_list_numbered,
-                    label: "${quiz.questions.length} Questions",
-                    color: Colors.blue,
-                  ),
-                  _buildStatChip(
-                    icon: Icons.timer,
-                    label: "${quiz.timerMinutes} min",
-                    color: Colors.orange,
-                  ),
-                  _buildStatChip(
-                    icon: Icons.star,
-                    label: "${quiz.totalMarks} marks",
-                    color: Colors.green,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Start button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
+              final quiz = publishedQuizzes[index];
+              return Card(
+                elevation: 2,
+                margin: const EdgeInsets.only(bottom: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: InkWell(
+                  onTap: () {
                     Navigator.pushNamed(
                       context,
                       '/quiz-play',
                       arguments: quiz,
                     );
                   },
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text("Start Quiz"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.indigo.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.quiz,
+                                color: Colors.indigo.shade700,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    quiz.title,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  _buildDifficultyBadge(quiz.difficulty),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Stats chips
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _buildInfoChip(
+                              Icons.format_list_numbered,
+                              "${quiz.questions.length} Questions",
+                              Colors.blue,
+                            ),
+                            _buildInfoChip(
+                              Icons.star,
+                              "${quiz.totalMarks} Marks",
+                              Colors.orange,
+                            ),
+                            _buildInfoChip(
+                              Icons.timer,
+                              "${quiz.timerMinutes} min",
+                              Colors.green,
+                            ),
+                            _buildInfoChip(
+                              Icons.calendar_today,
+                              _formatDate(quiz.timestamp),
+                              Colors.purple,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Action button
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/quiz-play',
+                                  arguments: quiz,
+                                );
+                              },
+                              icon: const Icon(Icons.play_arrow, size: 20),
+                              label: const Text("Start Quiz"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.indigo,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -229,46 +232,47 @@ class _StudentQuizListScreenState extends State<StudentQuizListScreen> {
         color = Colors.red;
         break;
       default:
-        color = Colors.blue;
+        color = Colors.grey;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(
             alpha: 0.2), // FIXED: Use withValues instead of withOpacity
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color, width: 1.5),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color, width: 1),
       ),
       child: Text(
         difficulty,
         style: TextStyle(
+          color: color,
           fontSize: 12,
           fontWeight: FontWeight.bold,
-          color: color,
         ),
       ),
     );
   }
 
-  Widget _buildStatChip({
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
-    return Column(
-      children: [
-        Icon(icon, size: 24, color: color),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade700,
-            fontWeight: FontWeight.w500,
+  Widget _buildInfoChip(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
