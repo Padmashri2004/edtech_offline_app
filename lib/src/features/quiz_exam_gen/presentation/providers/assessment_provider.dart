@@ -93,7 +93,7 @@ class AssessmentProvider extends ChangeNotifier {
             final question = await _aiRepository.generateQuestion(
               type: type,
               difficulty: difficulty,
-              topic: topics.isNotEmpty ? topics.first : 'general',
+              topic: topics.isNotEmpty ? topics.join(", ") : 'general',
               marks: marksPerQ,
             );
 

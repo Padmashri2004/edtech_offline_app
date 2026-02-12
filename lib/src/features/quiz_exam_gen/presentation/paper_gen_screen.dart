@@ -43,6 +43,9 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       final rawContent = args?['rawContent'] ?? '';
+      final metadata = args?['metadata'] as Map<String, String>?;
+      final extractedImages =
+          args?['extractedImages'] as List<Map<String, dynamic>>?;
 
       await provider.generateExamWithTier(
         title: _titleController.text.trim(),
@@ -53,6 +56,8 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
             .where((t) => t.isNotEmpty)
             .toList(),
         rawContent: rawContent,
+        metadata: metadata,
+        extractedImages: extractedImages,
       );
 
       if (!mounted) return;
@@ -61,7 +66,8 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
         _logger.i("✅ $_selectedTier tier exam generated successfully");
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text("$_selectedTier tier exam generated (100 marks)"),
+            content: Text("$_selectedTier tier exam generated successfully"),
+            backgroundColor: Colors.green,
           ),
         );
 
@@ -111,7 +117,7 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
                         Icon(Icons.info_outline, color: Colors.blue),
                         SizedBox(width: 8),
                         Text(
-                          "Automatic 100 Marks Papers",
+                          "Automatic Exam Papers",
                           style: TextStyle(
                               fontSize: 16, fontWeight: FontWeight.bold),
                         ),
@@ -119,9 +125,9 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      "• Basic Tier: Section A (20) + B (15) + C (35) + D (30) = 100\n"
-                      "• Advanced Tier: Section A (20) + B (25) + C (5) + D (50) = 100\n"
-                      "• Fixed structure as per government curriculum",
+                      "• Basic Tier: 25 questions, 35 marks, 90 min\n"
+                      "• Advanced Tier: 23 questions, 50 marks, 120 min\n"
+                      "• Fixed structure as per curriculum",
                       style: TextStyle(fontSize: 13),
                     ),
                   ],
@@ -153,7 +159,7 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Tier selection (MODERN, NO DEPRECATED API)
+            // Tier selection
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -161,35 +167,40 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      "Select Tier (100 marks automatic)",
+                      "Select Tier",
                       style:
                           TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 12),
+
+                    // ✅ FIXED: Using RadioGroup with 'groupValue'
                     RadioGroup<String>(
-                      groupValue: _selectedTier,
-                      onChanged: (value) {
+                      groupValue:
+                          _selectedTier, // Changed from value to groupValue
+                      onChanged: (String? value) {
                         if (value != null) {
                           setState(() => _selectedTier = value);
                         }
                       },
                       child: Column(
                         children: [
-                          ListTile(
-                            leading: const Radio<String>(value: "Basic"),
+                          RadioListTile<String>(
+                            value: "Basic",
+                            // No groupValue or onChanged here
                             title: const Text("Basic Tier"),
                             subtitle: const Text(
-                              "MCQ (5) + Fill-up (5) + Odd One Out (5) + Rearrange (5)\n"
-                              "+ Match It (5×3) + Short Ans (7×5) + Long Ans (3×10)",
+                              "MCQ (10) + Fill-up (5) + True/False (5) + Short Ans (5×3)",
                             ),
+                            activeColor: Colors.indigo,
                           ),
-                          ListTile(
-                            leading: const Radio<String>(value: "Advanced"),
+                          RadioListTile<String>(
+                            value: "Advanced",
+                            // No groupValue or onChanged here
                             title: const Text("Advanced Tier"),
                             subtitle: const Text(
-                              "MCQ (5) + Fill-up (5) + True/False (5) + Odd One Out (5)\n"
-                              "+ Short Ans (5×5) + Case Study (1×5) + Long Ans (5×10)",
+                              "MCQ (8) + Fill-up (4) + OddOneOut (3) + Short (4×3) + Long (3×5) + Case Study (1×8)",
                             ),
+                            activeColor: Colors.indigo,
                           ),
                         ],
                       ),
@@ -211,13 +222,14 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
                       )
                     : const Icon(Icons.description),
                 label: Text(
                   _isGenerating
                       ? "Generating $_selectedTier Tier..."
-                      : "Generate $_selectedTier Tier Exam (100 marks)",
+                      : "Generate $_selectedTier Tier Exam",
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
@@ -229,19 +241,30 @@ class _PaperGenScreenState extends State<PaperGenScreen> {
             ),
 
             if (_isGenerating)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Center(
-                  child: Column(
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 12),
+                    Text(
+                      provider.currentStatus.isNotEmpty
+                          ? provider.currentStatus
+                          : "Generating questions... This may take 1-2 minutes.",
+                      textAlign: TextAlign.center,
+                    ),
+                    if (provider.totalQuestions > 0) ...[
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: provider.generationProgress,
+                      ),
+                      const SizedBox(height: 4),
                       Text(
-                        "Generating questions... This may take 1-2 minutes.",
-                        textAlign: TextAlign.center,
+                        "${provider.questionsGenerated} / ${provider.totalQuestions} questions",
+                        style: TextStyle(color: Colors.grey.shade600),
                       ),
                     ],
-                  ),
+                  ],
                 ),
               ),
           ],

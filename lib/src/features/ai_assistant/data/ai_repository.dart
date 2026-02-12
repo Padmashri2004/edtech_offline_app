@@ -7,7 +7,6 @@ class AIRepository {
   final AIService _aiService = AIService();
   final Logger _logger = Logger();
 
-  // ✅ Generate single question
   Future<QuestionModel?> generateQuestion({
     required String type,
     required String difficulty,
@@ -22,10 +21,7 @@ class AIRepository {
         marks: marks,
       );
 
-      _logger.d('Generating $type question about $topic');
-
       final response = await _aiService.generateAssessment(prompt: prompt);
-
       return _parseQuestionFromResponse(response, type, marks);
     } catch (e) {
       _logger.e('Error generating question: $e');
@@ -33,36 +29,6 @@ class AIRepository {
     }
   }
 
-  // ✅ Generate multiple questions
-  Future<List<QuestionModel>> generateQuestions({
-    required String type,
-    required String difficulty,
-    required String topic,
-    required int count,
-    required int marksPerQuestion,
-  }) async {
-    final questions = <QuestionModel>[];
-
-    for (int i = 0; i < count; i++) {
-      final question = await generateQuestion(
-        type: type,
-        difficulty: difficulty,
-        topic: topic,
-        marks: marksPerQuestion,
-      );
-
-      if (question != null) {
-        questions.add(question);
-      }
-
-      // Small delay to avoid overwhelming the AI
-      await Future.delayed(const Duration(milliseconds: 200));
-    }
-
-    return questions;
-  }
-
-  // Build prompt for question generation
   String _buildQuestionPrompt({
     required String type,
     required String difficulty,
@@ -91,13 +57,19 @@ class AIRepository {
         jsonExample =
             '{"q":"Identify the odd one","o":["Apple","Carrot","Mango","Banana"],"a":"Carrot"}';
         break;
-      case 'ShortAns':
+      // ✅ ADDED: Case Study support for Module 6 Advanced Tier
+      case 'CaseStudy':
         instructions =
-            'Generate a Short Answer question (2-3 sentences answer).';
+            'Provide a short educational paragraph (Case Study) and one analytical question based on it.';
+        jsonExample =
+            '{"q":"[Paragraph...] Question?","o":[],"a":"Detailed Answer"}';
+        break;
+      case 'ShortAns':
+        instructions = 'Generate a Short Answer question (2-3 sentences).';
         jsonExample = '{"q":"Explain...","o":[],"a":"Brief answer"}';
         break;
       case 'LongAns':
-        instructions = 'Generate a Long Answer question (detailed answer).';
+        instructions = 'Generate a Long Answer question (detailed analysis).';
         jsonExample =
             '{"q":"Describe in detail...","o":[],"a":"Detailed answer"}';
         break;
@@ -112,57 +84,33 @@ Topic: $topic
 Difficulty: $difficulty
 Marks: $marks
 
-Return ONLY valid JSON (no markdown, no explanation):
+Return ONLY valid JSON:
 $jsonExample
 ''';
   }
 
-  // Parse AI response to QuestionModel
   QuestionModel? _parseQuestionFromResponse(
       String response, String type, int marks) {
     try {
       String cleaned = response.trim();
-      if (cleaned.startsWith('```json')) {
-        cleaned = cleaned.substring(7);
-      }
-      if (cleaned.startsWith('```')) {
-        cleaned = cleaned.substring(3);
-      }
-      if (cleaned.endsWith('```')) {
-        cleaned = cleaned.substring(0, cleaned.length - 3);
-      }
-      cleaned = cleaned.trim();
+      // Remove common Markdown clutter
+      cleaned = cleaned.replaceAll('```json', '').replaceAll('```', '').trim();
 
       final json = jsonDecode(cleaned);
-
       return QuestionModel(
         questionText: json['q'] as String,
         type: type,
         options: (json['o'] as List?)?.cast<String>() ?? [],
         correctAnswer: json['a'] as String,
         marks: marks,
-        explanation: '',
+        explanation: json['explanation'] ?? '',
       );
     } catch (e) {
-      _logger.e('Error parsing question response: $e');
-      _logger.e('Response was: $response');
+      _logger.e('JSON Parse Error: $e. Content: $response');
       return null;
     }
   }
 
-  // General purpose AI call
-  Future<String> generateText(String prompt) async {
-    return await _aiService.generateAssessment(prompt: prompt);
-  }
-
-  // Check if AI is initialized
-  Future<bool> isInitialized() async {
-    try {
-      final response =
-          await _aiService.generateAssessment(prompt: 'Test prompt');
-      return response.isNotEmpty;
-    } catch (e) {
-      return false;
-    }
-  }
+  Future<String> generateText(String prompt) async =>
+      await _aiService.generateAssessment(prompt: prompt);
 }

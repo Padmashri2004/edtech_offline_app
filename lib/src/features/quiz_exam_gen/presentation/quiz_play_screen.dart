@@ -156,53 +156,110 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
+                    'Question ${_currentQuestionIndex + 1} of ${widget.exam.questions.length}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
                     question.questionText,
                     style: const TextStyle(
                         fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 16),
+
+                  // Image if present
                   if (question.imagePath != null) ...[
-                    Image.file(File(question.imagePath!)),
-                    const SizedBox(height: 16),
-                  ],
-                  if (question.options.isNotEmpty) ...[
-                    IgnorePointer(
-                      ignoring: _showExplanations, // ✅ disable when reviewing
-                      child: RadioGroup<String>(
-                        groupValue: selectedAnswer,
-                        onChanged: (value) {
-                          if (value != null) _selectAnswer(value);
-                        },
-                        child: Column(
-                          children: question.options.map((opt) {
-                            return RadioListTile.adaptive(
-                              title: Text(opt),
-                              value: opt,
-                            );
-                          }).toList(),
-                        ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        File(question.imagePath!),
+                        fit: BoxFit.cover,
                       ),
                     ),
+                    const SizedBox(height: 16),
                   ],
+
+                  // Options
+                  if (question.options.isNotEmpty)
+                    RadioGroup<String>(
+                      groupValue: selectedAnswer,
+                      // ✅ FIXED: Using a permanent function that checks state internally
+                      onChanged: (value) {
+                        // If showing explanations, do not allow changes
+                        if (_showExplanations) return;
+
+                        // Otherwise, update selection
+                        if (value != null) {
+                          _selectAnswer(value);
+                        }
+                      },
+                      child: Column(
+                        children: question.options.map((option) {
+                          return RadioListTile<String>(
+                            value: option,
+                            title: Text(option),
+                            activeColor: Colors.indigo,
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 8),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+
+                  // AI Explanation (if review mode)
                   if (_showExplanations && question.explanation.isNotEmpty) ...[
                     const SizedBox(height: 24),
                     Container(
                       padding: const EdgeInsets.all(16),
-                      color: Colors.orange.shade50,
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("AI Explanation",
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 18)),
+                          Row(
+                            children: [
+                              Icon(Icons.lightbulb,
+                                  color: Colors.orange.shade700),
+                              const SizedBox(width: 8),
+                              const Text(
+                                "AI Explanation",
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 18),
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: 8),
                           Text(question.explanation),
-                          const SizedBox(height: 8),
-                          Text(
-                            "Correct Answer: ${question.correctAnswer}",
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle,
+                                    color: Colors.green, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    "Correct Answer: ${question.correctAnswer}",
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -212,28 +269,51 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
               ),
             ),
           ),
-          Padding(
+
+          // Navigation buttons
+          Container(
             padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.shade300,
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
             child: Row(
               children: [
                 if (_currentQuestionIndex > 0)
                   Expanded(
-                    child: OutlinedButton(
+                    child: OutlinedButton.icon(
                       onPressed: _previousQuestion,
-                      child: const Text("Previous"),
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text("Previous"),
                     ),
                   ),
                 if (_currentQuestionIndex > 0) const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton(
+                  flex: _currentQuestionIndex > 0 ? 1 : 2,
+                  child: ElevatedButton.icon(
                     onPressed: _currentQuestionIndex ==
                             widget.exam.questions.length - 1
                         ? (_showExplanations ? null : _submitQuiz)
                         : _nextQuestion,
-                    child: Text(
+                    icon: Icon(_currentQuestionIndex ==
+                            widget.exam.questions.length - 1
+                        ? Icons.check
+                        : Icons.arrow_forward),
+                    label: Text(
                       _currentQuestionIndex == widget.exam.questions.length - 1
                           ? "Submit"
                           : "Next",
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.indigo,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                   ),
                 ),
