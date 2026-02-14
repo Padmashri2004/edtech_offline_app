@@ -3,8 +3,12 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:logger/logger.dart';
 
 class PDFExportService {
+  final Logger _logger = Logger();
+
   Future<String?> exportExamToPDF(ExamModel exam) async {
     try {
       final pdf = pw.Document();
@@ -41,35 +45,68 @@ class PDFExportService {
               pw.SizedBox(height: 20),
 
               // Student info
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Class: ${exam.metadata?['class'] ?? '___________'}'),
-                  pw.Text('Roll No: ___________'),
-                ],
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey400),
+                  borderRadius:
+                      const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          flex: 2,
+                          child:
+                              pw.Text('Name: _______________________________'),
+                        ),
+                        pw.SizedBox(width: 20),
+                        pw.Expanded(
+                          child: pw.Text('Roll No: _______________'),
+                        ),
+                      ],
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: pw.Text(
+                              'Class: ${exam.metadata?['class'] ?? '_____________'}'),
+                        ),
+                        pw.SizedBox(width: 20),
+                        pw.Expanded(
+                          child: pw.Text(
+                              'Subject: ${exam.metadata?['subject'] ?? '_____________'}'),
+                        ),
+                        pw.SizedBox(width: 20),
+                        pw.Expanded(
+                          child: pw.Text('Date: _______________'),
+                        ),
+                      ],
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(
+                          'Total Marks: ${exam.totalMarks}',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.Text(
+                          'Time: ${_formatTime(exam.timerMinutes)}',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              pw.SizedBox(height: 5),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                      'Subject: ${exam.metadata?['subject'] ?? '___________'}'),
-                  pw.Text('Date: ___________'),
-                ],
-              ),
-              pw.SizedBox(height: 5),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Total Marks: ${exam.totalMarks}'),
-                  pw.Text('Time: ${exam.timerMinutes} minutes'),
-                ],
-              ),
-
               pw.Divider(thickness: 2),
               pw.SizedBox(height: 15),
 
-              // Instructions
+              // ✅ ENHANCED: Instructions with attempt logic
               pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(
@@ -85,77 +122,175 @@ class PDFExportService {
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                     ),
                     pw.SizedBox(height: 5),
-                    pw.Text('• All questions are compulsory'),
+                    pw.Text(
+                        '• This paper consists of ${sections.length} sections'),
+                    pw.Text(
+                        '• All questions in Section A and Section B are compulsory'),
+                    pw.Text(
+                        '• In Section C and Section D: Answer any 5 out of 7 questions'),
                     pw.Text('• Write answers in the space provided'),
                     pw.Text('• Marks are indicated against each question'),
                     pw.Text('• Read questions carefully before answering'),
                   ],
                 ),
               ),
-
               pw.SizedBox(height: 20),
 
               // Sections
-              ...sections.entries.map((entry) {
-                final sectionName = entry.key;
-                final questions = entry.value;
-                final sectionMarks = _calculateSectionMarks(questions);
+              if (exam.questions.isNotEmpty) ...[
+                ...sections.entries.map((entry) {
+                  final sectionName = entry.key;
+                  final questions = entry.value;
+                  final sectionMarks = _calculateSectionMarks(questions);
 
-                return pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    // Section header
-                    pw.Container(
-                      width: double.infinity,
-                      padding: const pw.EdgeInsets.all(8),
-                      decoration: pw.BoxDecoration(
-                        color: PdfColors.grey300,
-                        borderRadius:
-                            const pw.BorderRadius.all(pw.Radius.circular(5)),
-                      ),
-                      child: pw.Text(
-                        '$sectionName ($sectionMarks marks)',
-                        style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold,
-                          fontSize: 14,
+                  // ✅ Add attempt instruction for Sections C & D
+                  String attemptNote = '';
+                  if (sectionName == 'Section C' ||
+                      sectionName == 'Section D') {
+                    attemptNote = ' (Attempt any 5 out of 7)';
+                  }
+
+                  return pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      // Section header
+                      pw.Container(
+                        width: double.infinity,
+                        padding: const pw.EdgeInsets.all(8),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.grey300,
+                          borderRadius:
+                              const pw.BorderRadius.all(pw.Radius.circular(5)),
+                        ),
+                        child: pw.Text(
+                          '$sectionName ($sectionMarks marks)$attemptNote',
+                          style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
-                    ),
-                    pw.SizedBox(height: 10),
-
-                    // Questions in this section
-                    ...questions.asMap().entries.map((qEntry) {
-                      int globalNumber = 1;
-                      for (var prevSection in sections.entries) {
-                        if (prevSection.key == sectionName) {
-                          globalNumber += qEntry.key;
-                          break;
+                      pw.SizedBox(height: 10),
+                      // Questions
+                      ...questions.asMap().entries.map((qEntry) {
+                        int globalNumber = 1;
+                        for (var prevSection in sections.entries) {
+                          if (prevSection.key == sectionName) {
+                            globalNumber += qEntry.key;
+                            break;
+                          }
+                          globalNumber += prevSection.value.length;
                         }
-                        globalNumber += prevSection.value.length;
-                      }
-
-                      return _buildQuestionWidget(globalNumber, qEntry.value);
-                    }),
-
-                    pw.SizedBox(height: 20),
-                  ],
-                );
-              }),
+                        return _buildQuestionWidget(globalNumber, qEntry.value);
+                      }),
+                      pw.SizedBox(height: 20),
+                    ],
+                  );
+                }),
+              ] else ...[
+                pw.Center(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(20),
+                    child: pw.Text(
+                      '⚠️ No questions generated yet',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        color: PdfColors.red,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ];
           },
         ),
       );
 
-      // Save PDF
-      final output = await getApplicationDocumentsDirectory();
-      final file = File(
-          '${output.path}/exam_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      // Save to Downloads
+      final filePath = await _saveToDownloads(pdf, exam.title);
+      return filePath;
+    } catch (e) {
+      _logger.e('Error exporting PDF: $e');
+      return null;
+    }
+  }
+
+  // Format time correctly
+  String _formatTime(int minutes) {
+    if (minutes >= 60) {
+      int hours = minutes ~/ 60;
+      int mins = minutes % 60;
+      if (mins == 0) {
+        return '$hours ${hours == 1 ? "hour" : "hours"}';
+      } else {
+        return '$hours hrs $mins mins';
+      }
+    }
+    return '$minutes minutes';
+  }
+
+  // ✅ Save to Downloads folder
+  Future<String?> _saveToDownloads(pw.Document pdf, String examTitle) async {
+    try {
+      String downloadsPath;
+
+      if (Platform.isAndroid) {
+        var status = await Permission.storage.status;
+        if (!status.isGranted) {
+          status = await Permission.storage.request();
+          if (!status.isGranted) {
+            _logger.w('Storage permission denied');
+            return null;
+          }
+        }
+
+        downloadsPath = '/storage/emulated/0/Download';
+
+        final downloadsDir = Directory(downloadsPath);
+        if (!await downloadsDir.exists()) {
+          final externalDir = await getExternalStorageDirectory();
+          downloadsPath = externalDir?.path ?? '/storage/emulated/0/Download';
+        }
+      } else if (Platform.isIOS) {
+        final docDir = await getApplicationDocumentsDirectory();
+        downloadsPath = docDir.path;
+      } else {
+        final docDir = await getDownloadsDirectory();
+        downloadsPath =
+            docDir?.path ?? (await getApplicationDocumentsDirectory()).path;
+      }
+
+      // Clean filename
+      String cleanTitle = examTitle
+          .replaceAll(RegExp(r'[^\w\s-]'), '')
+          .replaceAll(RegExp(r'\s+'), '_')
+          .substring(0, examTitle.length > 50 ? 50 : examTitle.length);
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = '${cleanTitle}_$timestamp.pdf';
+      final filePath = '$downloadsPath/$fileName';
+
+      final file = File(filePath);
       await file.writeAsBytes(await pdf.save());
 
-      return file.path;
+      _logger.i('✅ PDF saved to: $filePath');
+      return filePath;
     } catch (e) {
-      // print('Error exporting PDF: $e');
-      return null;
+      _logger.e('❌ Error saving to Downloads: $e');
+
+      // Fallback
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final file = File('${appDir.path}/exam_$timestamp.pdf');
+        await file.writeAsBytes(await pdf.save());
+        _logger.w('⚠️ Saved to app directory: ${file.path}');
+        return file.path;
+      } catch (e2) {
+        _logger.e('❌ Fallback failed: $e2');
+        return null;
+      }
     }
   }
 
@@ -197,7 +332,6 @@ class PDFExportService {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          // Question text with marks
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
@@ -232,14 +366,10 @@ class PDFExportService {
             ],
           ),
           pw.SizedBox(height: 8),
-
-          // ✅ NEW: Image if attached (for exam papers)
           if (question.imagePath != null) ...[
             _buildImageWidget(question.imagePath!),
             pw.SizedBox(height: 8),
           ],
-
-          // Options for MCQ/True-False
           if (question.options.isNotEmpty &&
               (question.type == 'MCQ' ||
                   question.type == 'True/False' ||
@@ -259,8 +389,6 @@ class PDFExportService {
             ),
             pw.SizedBox(height: 5),
           ],
-
-          // Answer space
           if (question.type == 'Fill-up' ||
               question.type == 'ShortAns' ||
               question.type == 'LongAns' ||
@@ -294,7 +422,6 @@ class PDFExportService {
     );
   }
 
-  // ✅ NEW: Build image widget for PDF
   pw.Widget _buildImageWidget(String imagePath) {
     try {
       final imageFile = File(imagePath);
@@ -324,9 +451,8 @@ class PDFExportService {
         );
       }
     } catch (e) {
-      // print('Error adding image to PDF: $e');
+      _logger.w('Image not found: $imagePath');
     }
-
     return pw.SizedBox.shrink();
   }
 }

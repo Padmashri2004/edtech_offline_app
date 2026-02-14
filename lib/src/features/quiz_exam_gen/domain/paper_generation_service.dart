@@ -1,16 +1,18 @@
 import 'package:edtech_offline_app/src/features/ai_assistant/data/ai_repository.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/models/exam_model.dart';
 import 'package:edtech_offline_app/src/features/quiz_exam_gen/data/assessment_repository.dart';
+import 'package:edtech_offline_app/services/ai_prompt_service.dart';
 import 'package:logger/logger.dart';
 
 class PaperGenerationService {
   final AIRepository _aiRepository;
   final AssessmentRepository _assessmentRepository = AssessmentRepository();
+  final AiPromptService _promptService = AiPromptService();
   final Logger _logger = Logger();
 
   PaperGenerationService(this._aiRepository);
 
-  // ✅ NEW: Generate exam paper
+  // ✅ ENHANCED: Generate exam paper with batch processing
   Future<ExamModel> generatePaper({
     required String title,
     required String tier,
@@ -19,17 +21,26 @@ class PaperGenerationService {
     Function(int, int, String)? onProgress,
   }) async {
     try {
-      _logger.i('Generating exam paper: $title (Tier: $tier)');
+      _logger.i('🎯 Generating exam paper: $title (Tier: $tier)');
 
-      // Determine question distribution based on tier
+      // ✅ Get question distribution (100 marks total)
       final distribution = _getTierDistribution(tier);
-
       final List<QuestionModel> allQuestions = [];
+
       int totalToGenerate =
           distribution.values.fold(0, (sum, count) => sum + count);
+
+      onProgress?.call(0, totalToGenerate, 'Preparing content...');
+
+      // Chunk content if too large
+      final chunks = _promptService.chunkText(
+        content,
+        AiPromptService.maxTextLength,
+      );
+
       int generated = 0;
 
-      // Generate questions for each type
+      // Generate questions in batches by type
       for (var entry in distribution.entries) {
         final type = entry.key;
         final count = entry.value;
@@ -38,48 +49,68 @@ class PaperGenerationService {
         onProgress?.call(
             generated, totalToGenerate, 'Generating $type questions...');
 
-        for (int i = 0; i < count; i++) {
+        // Process in small batches
+        final batchSize = 3;
+        for (int i = 0; i < count; i += batchSize) {
+          int currentBatchSize =
+              (i + batchSize > count) ? count - i : batchSize;
+
           try {
-            var question = await _aiRepository.generateQuestion(
-              type: type,
-              difficulty: tier == 'Basic' ? 'Medium' : 'Hard',
-              topic:
-                  topics.isNotEmpty ? topics.first : content.substring(0, 100),
-              marks: marksPerQ,
-            );
+            for (int j = 0; j < currentBatchSize; j++) {
+              int chunkIndex = (i + j) % chunks.length;
+              String currentContext = chunks.isNotEmpty
+                  ? chunks[chunkIndex]
+                  : content.substring(
+                      0, content.length > 100 ? 100 : content.length);
 
-            if (question != null) {
-              // Check for duplicates
-              final exists =
-                  await _assessmentRepository.questionExists(question);
+              var question = await _aiRepository.generateQuestion(
+                type: type,
+                difficulty: tier == 'Basic' ? 'Medium' : 'Hard',
+                topic: topics.isNotEmpty
+                    ? topics.first
+                    : currentContext.substring(
+                        0,
+                        currentContext.length > 100
+                            ? 100
+                            : currentContext.length),
+                marks: marksPerQ,
+              );
 
-              if (!exists) {
-                allQuestions.add(question);
-                await _assessmentRepository.saveQuestionHistory(question);
-                generated++;
-                onProgress?.call(generated, totalToGenerate,
-                    'Generated $generated/$totalToGenerate questions');
-              } else {
-                _logger.w('Duplicate question detected, regenerating...');
-                i--; // Retry this question
+              if (question != null) {
+                // Check for duplicates
+                final exists =
+                    await _assessmentRepository.questionExists(question);
+                if (!exists) {
+                  allQuestions.add(question);
+                  await _assessmentRepository.saveQuestionHistory(question);
+                  generated++;
+                  onProgress?.call(generated, totalToGenerate,
+                      'Generated $generated/$totalToGenerate questions');
+                } else {
+                  _logger.w('⚠️ Duplicate detected, regenerating...');
+                  j--; // Retry
+                }
               }
-            }
-          } catch (e) {
-            _logger.e('Error generating question: $e');
-          }
 
-          await Future.delayed(const Duration(milliseconds: 100));
+              await Future.delayed(const Duration(milliseconds: 100));
+            }
+
+            await Future.delayed(const Duration(milliseconds: 300));
+          } catch (e) {
+            _logger.e('❌ Error generating $type batch: $e');
+          }
         }
       }
 
-      // Calculate total marks
+      // ✅ Calculate total marks
       final totalMarks = allQuestions.fold<int>(0, (sum, q) => sum + q.marks);
 
+      // ✅ Create exam model
       final exam = ExamModel(
         title: title,
         type: 'exam',
         difficulty: tier,
-        timerMinutes: tier == 'Basic' ? 90 : 120,
+        timerMinutes: tier == 'Basic' ? 180 : 180, // ✅ 3 hours for both
         totalMarks: totalMarks,
         questions: allQuestions,
         timestamp: DateTime.now().toIso8601String(),
@@ -89,36 +120,42 @@ class PaperGenerationService {
       onProgress?.call(totalToGenerate, totalToGenerate,
           'Exam paper generated successfully!');
 
+      _logger
+          .i('✅ Generated ${allQuestions.length} questions, $totalMarks marks');
       return exam;
     } catch (e) {
-      _logger.e('Error generating paper: $e');
+      _logger.e('❌ Error generating paper: $e');
       rethrow;
     }
   }
 
-  // Get question distribution for tier
+  // ✅ FIXED: Correct distribution for 100 marks
   Map<String, int> _getTierDistribution(String tier) {
     if (tier == 'Basic') {
+      // Basic Tier = 100 marks total
       return {
-        'MCQ': 10,
-        'Fill-up': 5,
-        'True/False': 5,
-        'ShortAns': 5,
+        'MCQ': 20, // 20 × 1 = 20 marks
+        'Fill-up': 20, // 15 × 1 = 15 marks
+        'True/False': 5, // 5 × 1 = 5 marks
+        'OddOneOut': 5, // 5 × 1 = 5 marks
+        'ShortAns': 7, // 7 × 5 = 35 marks (Attempt 5 out of 7)
+        'LongAns': 7, // 7 × 5 = 35 marks (Attempt 5 out of 7)
       };
     } else {
-      // Advanced
+      // Advanced Tier = 100 marks total
       return {
-        'MCQ': 8,
-        'Fill-up': 4,
-        'OddOneOut': 3,
-        'ShortAns': 4,
-        'LongAns': 3,
-        'CaseStudy': 1,
+        'MCQ': 20, // 20 × 1 = 20 marks
+        'Fill-up': 10, // 10 × 1 = 10 marks
+        'True/False': 5, // 5 × 1 = 5 marks
+        'OddOneOut': 5, // 5 × 1 = 5 marks
+        'ShortAns': 7, // 7 × 5 = 21 marks (Attempt 5 out of 7)
+        'LongAns': 7, // 7 × 5 = 35 marks (Attempt 5 out of 7)
+        'CaseStudy': 1, // 1 × 10 = 10 marks
       };
     }
   }
 
-  // Get marks for question type
+  // ✅ FIXED: Marks per question type
   int _getMarksForType(String type) {
     switch (type) {
       case 'MCQ':
@@ -127,40 +164,36 @@ class PaperGenerationService {
       case 'OddOneOut':
         return 1;
       case 'ShortAns':
-        return 3;
+        return 5;
       case 'LongAns':
         return 5;
       case 'CaseStudy':
-        return 8;
+        return 10;
       default:
         return 1;
     }
   }
 
-  // ✅ FIXED: Deduplicate questions using copyWith
+  // Deduplicate questions
   Future<List<QuestionModel>> deduplicateQuestions(
       List<QuestionModel> questions) async {
     final unique = <QuestionModel>[];
-
     for (var question in questions) {
       final exists = await _assessmentRepository.questionExists(question);
-
       if (!exists) {
         unique.add(question);
         await _assessmentRepository.saveQuestionHistory(question);
       }
     }
-
     return unique;
   }
 
-  // ✅ FIXED: Assign IDs to questions using copyWith
+  // Assign IDs to questions
   List<QuestionModel> assignQuestionIds(
       List<QuestionModel> questions, int examId) {
     return questions.asMap().entries.map((entry) {
-      // ✅ FIXED: Use copyWith instead of direct assignment
       return entry.value.copyWith(
-        id: examId * 1000 + entry.key, // Generate unique ID
+        id: examId * 1000 + entry.key,
       );
     }).toList();
   }

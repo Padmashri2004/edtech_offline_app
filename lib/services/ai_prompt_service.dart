@@ -7,6 +7,7 @@ class AiPromptService {
   static const int recommendedQuestionsPerCall = 3;
   static const int maxPromptTokens = 300;
 
+  /// ✅ ENHANCED: Build section prompt with tier-aware hint logic
   String buildSectionPrompt({
     required String text,
     required String difficulty,
@@ -14,6 +15,7 @@ class AiPromptService {
     required int count,
     bool hintsIncluded = false,
     List<String>? focusTopics,
+    String? tier, // ✅ NEW: Pass tier to determine hint logic
   }) {
     // Ensure safe text length
     String safeText =
@@ -36,9 +38,14 @@ class AiPromptService {
         break;
 
       case 'Fill-up':
-        instructions = hintsIncluded
-            ? "Generate $count Fill-in-the-blanks. IMPORTANT: Add a (Hint) at the end of the question text."
-            : "Generate $count Fill-in-the-blanks. No hints.";
+        // ✅ FIXED: Hint logic based on tier
+        if (tier == 'Basic') {
+          instructions =
+              "Generate $count Fill-in-the-blanks. IMPORTANT: Add a helpful (Hint) at the end of the question text.";
+        } else {
+          instructions =
+              "Generate $count Fill-in-the-blanks. NO hints should be provided.";
+        }
         jsonExample = '[{"q":"The sky is ____.","o":[],"a":"Blue"}]';
         break;
 
@@ -83,7 +90,7 @@ class AiPromptService {
 
       case 'LongAns':
         instructions =
-            "Generate $count Long Answer questions (detailed, 8–10 sentences).";
+            "Generate $count Long Answer questions (detailed, 8-10 sentences).";
         jsonExample =
             '[{"q":"Describe in detail...","o":[],"a":"Detailed Answer"}]';
         break;
@@ -103,7 +110,77 @@ OUTPUT JSON ONLY. No Markdown. Format:
 $jsonExample
 """;
 
-    _logger.d("🔹 Prompt built for section type: $sectionType");
+    _logger.d(
+        "🔹 Prompt built for section type: $sectionType (Tier: ${tier ?? 'N/A'})");
     return prompt;
+  }
+
+  /// ✅ NEW: Build batch prompts for multiple question types
+  List<String> buildBatchPrompts({
+    required String text,
+    required String difficulty,
+    required Map<String, int> distribution,
+    List<String>? focusTopics,
+    String? tier, // ✅ NEW
+  }) {
+    List<String> prompts = [];
+
+    for (var entry in distribution.entries) {
+      String sectionType = entry.key;
+      int count = entry.value;
+
+      // Split large counts into smaller batches
+      int remaining = count;
+      while (remaining > 0) {
+        int batchSize = remaining > recommendedQuestionsPerCall
+            ? recommendedQuestionsPerCall
+            : remaining;
+
+        String prompt = buildSectionPrompt(
+          text: text,
+          difficulty: difficulty,
+          sectionType: sectionType,
+          count: batchSize,
+          focusTopics: focusTopics,
+          tier: tier, // ✅ Pass tier
+        );
+
+        prompts.add(prompt);
+        remaining -= batchSize;
+      }
+    }
+
+    _logger.i("📦 Built ${prompts.length} batch prompts");
+    return prompts;
+  }
+
+  /// Calculate estimated token count
+  int estimateTokenCount(String text) {
+    return (text.length / 4).ceil();
+  }
+
+  /// Chunk large text into manageable pieces
+  List<String> chunkText(String text, int maxChunkLength) {
+    List<String> chunks = [];
+    int start = 0;
+
+    while (start < text.length) {
+      int end = start + maxChunkLength;
+      if (end > text.length) end = text.length;
+
+      // Try to break at sentence boundary
+      if (end < text.length) {
+        int lastPeriod = text.lastIndexOf('.', end);
+        if (lastPeriod > start) {
+          end = lastPeriod + 1;
+        }
+      }
+
+      chunks.add(text.substring(start, end).trim());
+      start = end;
+    }
+
+    _logger.d("📄 Split text into ${chunks.length} chunks");
+    return chunks;
   }
 }

@@ -34,14 +34,228 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
       setState(() {
         _selectedFile = file;
         _chapters = chapters;
-        _tocDetected = chapters.isNotEmpty; // simple heuristic
+        _tocDetected = chapters.isNotEmpty;
         _isLoading = false;
         _checkedChaptersIndices.clear();
         _selectAll = false;
       });
+
+      // ✅ Show TOC preview dialog
+      if (chapters.isNotEmpty && mounted) {
+        _showTOCPreview(chapters);
+      }
     } else {
       setState(() => _isLoading = false);
     }
+  }
+
+  // ✅ NEW: Show TOC preview with edit options
+  Future<void> _showTOCPreview(List<Map<String, dynamic>> chapters) async {
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(_tocDetected ? Icons.check_circle : Icons.warning,
+                color: _tocDetected ? Colors.green : Colors.orange),
+            const SizedBox(width: 8),
+            const Text('Table of Contents Preview'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '📖 Found ${chapters.length} chapters',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Review the detected chapters below. You can edit or delete any incorrect entries.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: chapters.length,
+                  itemBuilder: (context, index) {
+                    final chapter = chapters[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.indigo,
+                          child: Text(
+                            '${chapter['chapterNumber']}',
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 12),
+                          ),
+                        ),
+                        title: Text(
+                          chapter['title'],
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          'Pages: ${chapter['startPage']} - ${chapter['endPage']}',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 20),
+                              onPressed: () => _editChapter(ctx, index),
+                              tooltip: 'Edit',
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete,
+                                  size: 20, color: Colors.red),
+                              onPressed: () => _deleteChapter(index),
+                              tooltip: 'Delete',
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {}); // Refresh main view
+            },
+            icon: const Icon(Icons.check),
+            label: const Text('Looks Good'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ NEW: Edit chapter details
+  Future<void> _editChapter(BuildContext dialogContext, int index) async {
+    final chapter = _chapters[index];
+    final titleController = TextEditingController(text: chapter['title']);
+    final startPageController =
+        TextEditingController(text: chapter['startPage'].toString());
+    final endPageController =
+        TextEditingController(text: chapter['endPage'].toString());
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit Chapter ${chapter['chapterNumber']}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(
+                labelText: 'Chapter Title',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: startPageController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Start Page',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: endPageController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'End Page',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newTitle = titleController.text.trim();
+              final newStart = int.tryParse(startPageController.text.trim());
+              final newEnd = int.tryParse(endPageController.text.trim());
+
+              if (newTitle.isEmpty || newStart == null || newEnd == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Please fill all fields correctly')),
+                );
+                return;
+              }
+
+              setState(() {
+                _chapters[index]['title'] = newTitle;
+                _chapters[index]['startPage'] = newStart;
+                _chapters[index]['endPage'] = newEnd;
+              });
+
+              Navigator.pop(ctx);
+              Navigator.pop(dialogContext); // Close preview dialog
+              _showTOCPreview(_chapters); // Reopen with updated data
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    titleController.dispose();
+    startPageController.dispose();
+    endPageController.dispose();
+  }
+
+  // ✅ NEW: Delete chapter from list
+  void _deleteChapter(int index) {
+    setState(() {
+      _chapters.removeAt(index);
+    });
   }
 
   void _toggleSelectAll(bool? value) {
@@ -64,13 +278,11 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
 
     for (int index in _checkedChaptersIndices) {
       final chapter = _chapters[index];
-
       final images = await _imageService.extractImagesWithCaptions(
         _selectedFile!,
         chapter['startPage'],
         chapter['endPage'],
       );
-
       _extractedImages.addAll(images);
     }
 
@@ -83,16 +295,24 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
         SnackBar(
             content: Text('✅ Extracted ${_extractedImages.length} images')),
       );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ No academic images with captions found'),
+          backgroundColor: Colors.orange,
+        ),
+      );
     }
   }
 
   Future<void> _navigateToModule(String routeName) async {
     if (_checkedChaptersIndices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Select a chapter first.")),
+        const SnackBar(content: Text("Select at least one chapter first.")),
       );
       return;
     }
+
     if (_selectedFile == null) return;
 
     if (_extractedImages.isEmpty) {
@@ -101,6 +321,7 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
 
     final firstIndex = _checkedChaptersIndices.first;
     final chapter = _chapters[firstIndex];
+
     setState(() => _isLoading = true);
 
     final rawContent = await _pdfService.extractChapterText(
@@ -130,6 +351,14 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
         title: const Text("Select Content"),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
+        actions: [
+          if (_chapters.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.preview),
+              onPressed: () => _showTOCPreview(_chapters),
+              tooltip: 'Preview TOC',
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -208,8 +437,8 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
                   Expanded(
                     child: Text(
                       _tocDetected
-                          ? '✓ Chapters detected'
-                          : '⚠ Using fallback chapter detection',
+                          ? '✅ ${_chapters.length} chapters detected'
+                          : '⚠️ Using fallback detection - ${_chapters.length} chapters found',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: _tocDetected
@@ -217,6 +446,10 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
                             : Colors.orange.shade900,
                       ),
                     ),
+                  ),
+                  TextButton(
+                    onPressed: () => _showTOCPreview(_chapters),
+                    child: const Text('Review'),
                   ),
                 ],
               ),
@@ -253,12 +486,44 @@ class _ChapterListScreenState extends State<ChapterListScreen> {
                       final chapter = _chapters[index];
                       final title = chapter['title'];
                       return Card(
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
                         child: CheckboxListTile(
-                          title: Text(title,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(
-                              "Pages ${chapter['startPage']} - ${chapter['endPage']}"),
+                          title: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.indigo.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Ch ${chapter['chapterNumber']}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.indigo.shade900,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              "Pages ${chapter['startPage']} - ${chapter['endPage']}",
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                          ),
                           value: _checkedChaptersIndices.contains(index),
                           onChanged: (bool? val) {
                             setState(() {
